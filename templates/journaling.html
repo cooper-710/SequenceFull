@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+
+{% block title %}Journaling{% endblock %}
+
+{% block content %}
+<section class="page-shell journal-page">
+    <header class="section-hero">
+        <div class="section-hero-heading">
+            <h1 class="hero-content">Journaling</h1>
+        </div>
+        {% if current_user and current_user.is_admin %}
+        <div class="section-hero-actions journal-view-switch">
+            <a class="journal-view-tab {% if not is_admin_view %}is-active{% endif %}"
+               href="{{ url_for('journaling') }}">
+                My Entries
+            </a>
+            <a class="journal-view-tab {% if is_admin_view %}is-active{% endif %}"
+               href="{{ url_for('journaling_admin') }}">
+                Public Journals
+            </a>
+        </div>
+        {% endif %}
+    </header>
+
+    <div class="journal-layout">
+        <div class="journal-column">
+            {% if entry_errors %}
+            <div class="alert alert-danger journal-alert" role="alert">
+                <div class="alert-content">
+                    <strong>We couldn’t save that entry.</strong>
+                    <ul class="mb-0">
+                        {% for error in entry_errors %}
+                        <li>{{ error }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if just_saved %}
+            <div class="alert alert-success journal-alert" role="alert">
+                <div class="alert-content">
+                    <strong>Saved!</strong>
+                    <span>Your reflections are locked in.</span>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if is_admin_view %}
+            <div class="journal-card journal-card--glass mb-4">
+                <form class="journal-form journal-form--inline" method="get" action="{{ url_for('journaling_admin') }}">
+                    <div class="journal-field">
+                        <label for="user_id" class="form-label">Player</label>
+                        <select class="form-select" id="user_id" name="user_id">
+                            {% for option in admin_user_options %}
+                            <option value="{{ option.id }}" {% if target_user and option.id == target_user.id %}selected{% endif %}>
+                                {{ option.label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% if selected_date %}
+                    <input type="hidden" name="date" value="{{ selected_date }}">
+                    {% endif %}
+                    <div class="journal-actions">
+                        <button type="submit" class="btn btn-primary">View Entries</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="journal-card journal-card--glass mb-4">
+                <h2 class="journal-card-title">
+                    <span>Entry Details</span>
+                    {% if entry and entry.updated_at_human %}
+                    <small>Updated {{ entry.updated_at_human }}</small>
+                    {% endif %}
+                </h2>
+                <dl class="journal-entry-meta">
+                    <div>
+                        <dt>Date</dt>
+                        <dd>{{ entry.display_date or selected_date_display or '—' }}</dd>
+                    </div>
+                    <div>
+                        <dt>Visibility</dt>
+                        <dd><span class="journal-pill journal-pill--{{ selected_visibility }}">{{ selected_visibility|capitalize }}</span></dd>
+                    </div>
+                    <div>
+                        <dt>Title</dt>
+                        <dd>{{ entry.title or 'Untitled' }}</dd>
+                    </div>
+                </dl>
+                <div class="journal-entry-body">
+                    {% if entry %}
+                        {{ (entry.body or '') | e | replace('\n', '<br>') | safe }}
+                    {% else %}
+                        <p class="text-muted mb-0">No public entry recorded{{ ' for ' ~ selected_date if selected_date else '' }}.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% else %}
+            <div class="journal-card journal-card--glass">
+                <div class="journal-card-header">
+                    <div>
+                        <h2 class="journal-card-title">Daily Entry</h2>
+                        <p class="journal-card-subtitle">Drop in thoughts, wins, challenges, or anything future-you should remember.</p>
+                    </div>
+                    <div class="journal-date-indicator">
+                        <span class="journal-date-label">Selected day</span>
+                        <span class="journal-date-value">{{ entry.display_date or selected_date_display or today_display or today }}</span>
+                    </div>
+                </div>
+                <form method="post" class="journal-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <div class="journal-form-grid">
+                        <div class="journal-field">
+                            <label for="entry_date" class="form-label">Date</label>
+                            <input type="date" class="form-control" id="entry_date" name="entry_date" value="{{ selected_date or today }}" max="{{ today }}">
+                        </div>
+                        <div class="journal-field">
+                            <label for="visibility" class="form-label">Visibility</label>
+                            <select class="form-select" id="visibility" name="visibility">
+                                {% for option in journal_visibility_options %}
+                                <option value="{{ option }}" {% if option == selected_visibility %}selected{% endif %}>
+                                    {{ option|capitalize }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">
+                                Public entries appear for admins. Private entries stay locked to you.
+                            </div>
+                        </div>
+                        <div class="journal-field journal-field--wide">
+                            <label for="title" class="form-label">Title (optional)</label>
+                            <input type="text" class="form-control" id="title" name="title" maxlength="120" value="{{ entry.title if entry else '' }}" placeholder="Dial in a quick headline">
+                        </div>
+                    </div>
+                    <div class="journal-field journal-field--full">
+                        <label for="body" class="form-label">Entry</label>
+                        <textarea class="form-control journal-textarea" id="body" name="body" rows="10" placeholder="What stood out today? Any adjustments, cues, or confidence boosters to remember?">{{ entry.body if entry else '' }}</textarea>
+                    </div>
+                    <div class="journal-actions">
+                        <button type="submit" class="btn btn-primary">Save Entry</button>
+                        <a class="journal-link" href="{{ url_for('journaling', date=today, visibility=selected_visibility) }}">
+                            Jump to Today
+                        </a>
+                    </div>
+                </form>
+                {% if entry %}
+                <form method="post"
+                      action="{{ url_for('delete_journal_entry_route') }}"
+                      class="journal-delete-inline"
+                      onsubmit="return confirm('Delete this journal entry?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="entry_id" value="{{ entry.id }}">
+                    <input type="hidden" name="entry_date" value="{{ selected_date }}">
+                    <input type="hidden" name="visibility" value="{{ selected_visibility }}">
+                    <button type="submit" class="btn btn-danger">Delete Entry</button>
+                </form>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <aside class="journal-column journal-column--timeline">
+            <section class="journal-card journal-card--timeline">
+                <div class="journal-timeline-header">
+                    <div>
+                        <h2 class="journal-card-title">Timeline</h2>
+                        <p class="journal-card-subtitle">Select a date to review or edit an entry.</p>
+                    </div>
+                    <div class="journal-timeline-meta">
+                        <span class="journal-pill journal-pill--private">Locked</span>
+                        <span class="journal-pill journal-pill--public">Public</span>
+                    </div>
+                </div>
+                {% if timeline_entries %}
+                <div class="journal-timeline">
+                    {% for day in timeline_entries %}
+                    <div class="journal-timeline-day">
+                        <div class="journal-timeline-date">
+                            <span class="journal-timeline-date-display">{{ day.display_date }}</span>
+                            <span class="journal-timeline-date-raw">{{ day.date }}</span>
+                        </div>
+                        <div class="journal-timeline-list">
+                            {% for item in day.entries %}
+                            {% set is_selected = (day.date == selected_date and item.visibility == selected_visibility) %}
+                            {% if is_admin_view %}
+                            {% set entry_url = url_for('journaling_admin', user_id=target_user.id if target_user else None, date=day.date) %}
+                            {% else %}
+                            {% set entry_url = url_for('journaling', date=day.date, visibility=item.visibility) %}
+                            {% endif %}
+                            <a href="{{ entry_url }}"
+                               class="journal-timeline-item {% if is_selected %}is-active{% endif %}">
+                                <div class="journal-timeline-item-top">
+                                    <span class="journal-pill journal-pill--{{ item.visibility }}">
+                                        {{ item.visibility|capitalize }}
+                                    </span>
+                                    {% if item.updated_at_human %}
+                                    <small>{{ item.updated_at_human }}</small>
+                                    {% endif %}
+                                </div>
+                                {% if item.title %}
+                                <div class="journal-timeline-item-title">{{ item.title }}</div>
+                                {% endif %}
+                                {% if item.preview %}
+                                <p class="journal-timeline-item-preview">{{ item.preview }}</p>
+                                {% endif %}
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="journal-empty">
+                    {% if is_admin_view %}
+                    <p>No public entries recorded yet.</p>
+                    {% else %}
+                    <p>Nothing here yet—capture your first entry to start the streak.</p>
+                    <a class="journal-link" href="{{ url_for('journaling', date=today, visibility=selected_visibility) }}">Start with today&rsquo;s entry</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </section>
+        </aside>
+    </div>
+
+</section>
+{% endblock %}
+

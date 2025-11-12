@@ -1,0 +1,1167 @@
+{% extends "base.html" %}
+
+{% block title %}Pitch Tunnel Analysis - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Pitch Tunnel Analysis</h1>
+                <p class="page-subtitle">Interactive 3D pitch tunnel visualization from the batter's perspective</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="pitch-tunnel-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Pitcher Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="pitcherSearch" 
+                        class="control-input" 
+                        placeholder="Type to search pitchers..."
+                        autocomplete="off"
+                    >
+                    <div id="pitcherSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedPitcherDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedPitcherName"></span>
+                    <button id="clearPitcher" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Compare Pitch Types</label>
+                <select id="pitchTypeSelect" class="control-select" multiple>
+                    <option value="FF">Four-Seam Fastball</option>
+                    <option value="FT">Two-Seam Fastball</option>
+                    <option value="SI">Sinker</option>
+                    <option value="FC">Cutter</option>
+                    <option value="SL">Slider</option>
+                    <option value="ST">Sweeper</option>
+                    <option value="CU">Curveball</option>
+                    <option value="KC">Knuckle Curve</option>
+                    <option value="CH">Changeup</option>
+                    <option value="FS">Split-Finger</option>
+                </select>
+                <small style="color: var(--color-text-subtle); font-size: 0.85rem; margin-top: 0.25rem;">Hold Ctrl/Cmd to select multiple</small>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Batter Handedness</label>
+                <select id="batterHandSelect" class="control-select">
+                    <option value="">All</option>
+                    <option value="R">Right</option>
+                    <option value="L">Left</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Count</label>
+                <select id="countSelect" class="control-select">
+                    <option value="">All Counts</option>
+                    <option value="0-0">0-0</option>
+                    <option value="1-0">1-0</option>
+                    <option value="0-1">0-1</option>
+                    <option value="1-1">1-1</option>
+                    <option value="2-0">2-0</option>
+                    <option value="2-1">2-1</option>
+                    <option value="1-2">1-2</option>
+                    <option value="2-2">2-2</option>
+                    <option value="3-0">3-0</option>
+                    <option value="3-1">3-1</option>
+                    <option value="3-2">3-2</option>
+                    <option value="0-2">0-2</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Tunnel Distance (ft)</label>
+                <input type="number" id="tunnelDistance" class="control-input" value="23" min="15" max="30" step="1">
+                <small style="color: var(--color-text-subtle); font-size: 0.85rem; margin-top: 0.25rem;">Distance from release where pitches look similar</small>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">View Mode</label>
+                <select id="viewModeSelect" class="control-select">
+                    <option value="3d">3D Trajectory</option>
+                    <option value="top">Top View</option>
+                    <option value="side">Side View</option>
+                    <option value="batter">Batter's View</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Show Markers</label>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-muted);">
+                        <input type="checkbox" id="showReleasePoint" class="control-checkbox" checked>
+                        <span>Release Point</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-muted);">
+                        <input type="checkbox" id="showTunnelPoint" class="control-checkbox" checked>
+                        <span>Tunnel Point</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-muted);">
+                        <input type="checkbox" id="showBreakPoint" class="control-checkbox" checked>
+                        <span>Break Point</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; color: var(--color-text-muted);">
+                        <input type="checkbox" id="showPlate" class="control-checkbox" checked>
+                        <span>Plate Location</span>
+                    </label>
+                </div>
+            </div>
+
+            <button id="generateTunnel" class="generate-btn" type="button">
+                <i class="fas fa-project-diagram"></i> Generate Tunnel Analysis
+            </button>
+        </div>
+
+        <!-- Visualization Container -->
+        <div class="pitch-tunnel-container">
+            <div class="pitch-tunnel-wrapper">
+                <div class="plot-controls">
+                    <button id="resetView" class="plot-control-btn" style="display: none;">
+                        <i class="fas fa-undo"></i> Reset View
+                    </button>
+                    <button id="toggleAnimation" class="plot-control-btn" style="display: none;">
+                        <i class="fas fa-play"></i> <span id="animationText">Animate</span>
+                    </button>
+                </div>
+                <div id="pitchTunnelChart" class="pitch-tunnel-chart"></div>
+                <div id="pitchTunnelInfo" class="pitch-tunnel-info">
+                    <p>Select a pitcher and click "Generate Tunnel Analysis" to visualize pitch trajectories.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+<script>
+// Pitch type colors (Trackman-style)
+const PITCH_COLORS = {
+    "FF": "#FF0000", "FT": "#8B0000", "SI": "#FFA500", "FC": "#808080",
+    "SL": "#0000FF", "CU": "#800080", "CH": "#008000", "FS": "#00FFFF",
+    "KC": "#4B0082", "KN": "#D3D3D3", "ST": "#008080", "SV": "#4682B4"
+};
+
+let selectedPitcher = null;
+let tunnelData = null;
+let currentPlot = null;
+let animationInterval = null;
+let animationFrame = 0;
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadFilterOptions();
+    setupPitcherSearch();
+    
+    const generateBtn = document.getElementById('generateTunnel');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+        generateBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!selectedPitcher) {
+                alert('Please select a pitcher first');
+                return;
+            }
+            generateTunnel();
+        });
+    }
+
+    document.getElementById('clearPitcher').addEventListener('click', function() {
+        clearPitcherSelection();
+    });
+    
+    const resetBtn = document.getElementById('resetView');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (currentPlot) {
+                resetView();
+            }
+        });
+    }
+    
+    const toggleAnimationBtn = document.getElementById('toggleAnimation');
+    if (toggleAnimationBtn) {
+        toggleAnimationBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            toggleAnimation();
+        });
+    }
+    
+    // Update visualization when controls change
+    ['showReleasePoint', 'showTunnelPoint', 'showBreakPoint', 'showPlate', 'viewModeSelect'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('change', function() {
+                if (tunnelData && currentPlot) {
+                    renderTunnel(tunnelData);
+                }
+            });
+        }
+    });
+});
+
+async function loadFilterOptions() {
+    try {
+        const response = await fetch('/api/analytics/players');
+        const data = await response.json();
+        if (data.players) {
+            console.log(`Loaded ${data.players.length} players for search`);
+        }
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
+}
+
+async function loadPitcherSeasons(pitcherName) {
+    try {
+        const encodedName = encodeURIComponent(pitcherName);
+        const response = await fetch(`/api/pitcher/${encodedName}/seasons`);
+        
+        if (!response.ok) {
+            const seasonSelect = document.getElementById('seasonSelect');
+            if (seasonSelect) {
+                seasonSelect.innerHTML = '<option value="">Error loading seasons</option>';
+            }
+            return;
+        }
+        
+        const data = await response.json();
+        const seasons = data.seasons || [];
+        
+        const seasonSelect = document.getElementById('seasonSelect');
+        if (!seasonSelect) return;
+        
+        seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+        
+        if (seasons.length === 0) {
+            seasonSelect.innerHTML = '<option value="">No seasons available</option>';
+        } else {
+            const sortedSeasons = [...seasons].sort((a, b) => {
+                const aInt = parseInt(a) || 0;
+                const bInt = parseInt(b) || 0;
+                return bInt - aInt;
+            });
+            
+            sortedSeasons.forEach(season => {
+                const option = document.createElement('option');
+                option.value = season;
+                option.textContent = season;
+                seasonSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading pitcher seasons:', error);
+        // Fallback: try CSV seasons endpoint
+        try {
+            const encodedName = encodeURIComponent(pitcherName);
+            const response = await fetch(`/api/csv/player/${encodedName}/seasons`);
+            if (response.ok) {
+                const data = await response.json();
+                const seasons = data.seasons || [];
+                const seasonSelect = document.getElementById('seasonSelect');
+                if (seasonSelect && seasons.length > 0) {
+                    seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+                    [...seasons].sort((a, b) => parseInt(b) - parseInt(a)).forEach(season => {
+                        const option = document.createElement('option');
+                        option.value = season;
+                        option.textContent = season;
+                        seasonSelect.appendChild(option);
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('Fallback season load failed:', e);
+        }
+    }
+}
+
+let searchTimeout = null;
+
+function setupPitcherSearch() {
+    const input = document.getElementById('pitcherSearch');
+    const dropdown = document.getElementById('pitcherSearchDropdown');
+    
+    if (!input || !dropdown) return;
+    
+    input.disabled = false;
+    input.readOnly = false;
+    input.style.pointerEvents = 'auto';
+    
+    async function searchPitchers() {
+        const searchTerm = input.value.trim();
+        
+        if (!searchTerm || searchTerm.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/csv/search?q=${encodeURIComponent(searchTerm)}`);
+            const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+            
+            const players = data.players || [];
+            
+            if (players.length === 0) {
+                dropdown.innerHTML = '<div class="player-dropdown-item" style="color: var(--color-text-muted);">No pitchers found</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            dropdown.innerHTML = players.slice(0, 10).map(player => 
+                `<div class="player-dropdown-item" data-player="${player.name.replace(/"/g, '&quot;')}">${player.name}</div>`
+            ).join('');
+            dropdown.style.display = 'block';
+            
+            dropdown.querySelectorAll('.player-dropdown-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const playerName = this.getAttribute('data-player');
+                    if (playerName && !playerName.includes('No pitchers found')) {
+                        selectPitcher(playerName);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Search error:', error);
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    input.addEventListener('input', function(e) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(searchPitchers, 300);
+    });
+    
+    input.addEventListener('focus', function() {
+        if (this.value.trim().length >= 2) {
+            searchPitchers();
+        }
+    });
+    
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(searchTimeout);
+            const firstMatch = dropdown.querySelector('.player-dropdown-item[data-player]');
+            if (firstMatch && !firstMatch.textContent.includes('No pitchers found')) {
+                firstMatch.click();
+            } else if (this.value.trim().length >= 2) {
+                selectPitcher(this.value.trim());
+            }
+        }
+    });
+    
+    document.addEventListener('click', function(e) {
+        if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+function selectPitcher(pitcherName) {
+    selectedPitcher = pitcherName;
+    const searchInput = document.getElementById('pitcherSearch');
+    if (searchInput) {
+        searchInput.value = pitcherName;
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('pitcherSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    
+    const display = document.getElementById('selectedPitcherDisplay');
+    const nameSpan = document.getElementById('selectedPitcherName');
+    if (display && nameSpan) {
+        nameSpan.textContent = pitcherName;
+        display.style.display = 'flex';
+    }
+    
+    const generateBtn = document.getElementById('generateTunnel');
+    if (generateBtn) {
+        generateBtn.classList.remove('disabled');
+    }
+    
+    loadPitcherSeasons(pitcherName);
+}
+
+function clearPitcherSelection() {
+    selectedPitcher = null;
+    document.getElementById('pitcherSearch').value = '';
+    document.getElementById('selectedPitcherDisplay').style.display = 'none';
+    document.getElementById('seasonSelect').innerHTML = '<option value="">All Seasons</option>';
+    
+    const generateBtn = document.getElementById('generateTunnel');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+    }
+    
+    tunnelData = null;
+    if (currentPlot) {
+        document.getElementById('pitchTunnelChart').innerHTML = '';
+        currentPlot = null;
+    }
+    
+    stopAnimation();
+    document.getElementById('pitchTunnelInfo').innerHTML = '<p>Select a pitcher and click "Generate Tunnel Analysis" to visualize pitch trajectories.</p>';
+}
+
+async function generateTunnel() {
+    if (!selectedPitcher) {
+        alert('Please select a pitcher first');
+        return;
+    }
+    
+    const generateBtn = document.getElementById('generateTunnel');
+    if (generateBtn) {
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    }
+    
+    const infoDiv = document.getElementById('pitchTunnelInfo');
+    infoDiv.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading pitch trajectory data...</p>';
+    
+    try {
+        // Collect filter parameters
+        const pitchTypes = Array.from(document.getElementById('pitchTypeSelect').selectedOptions).map(opt => opt.value);
+        const params = new URLSearchParams({
+            pitcher: selectedPitcher,
+            season: document.getElementById('seasonSelect').value || '',
+            pitch_types: pitchTypes.join(','),
+            batter_hand: document.getElementById('batterHandSelect').value || '',
+            count: document.getElementById('countSelect').value || '',
+            tunnel_distance: document.getElementById('tunnelDistance').value || '23'
+        });
+        
+        const response = await fetch(`/api/visuals/pitch-tunnel?${params.toString()}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        tunnelData = data;
+        renderTunnel(data);
+        
+    } catch (error) {
+        console.error('Error generating tunnel:', error);
+        infoDiv.innerHTML = `<p style="color: var(--color-danger);">Error: ${error.message}</p>`;
+    } finally {
+        if (generateBtn) {
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<i class="fas fa-project-diagram"></i> Generate Tunnel Analysis';
+        }
+    }
+}
+
+function renderTunnel(data) {
+    const chartDiv = document.getElementById('pitchTunnelChart');
+    const infoDiv = document.getElementById('pitchTunnelInfo');
+    
+    if (!data.trajectories || data.trajectories.length === 0) {
+        chartDiv.innerHTML = '';
+        infoDiv.innerHTML = '<p style="color: var(--color-text-subtle);">No trajectory data available for the selected filters.</p>';
+        return;
+    }
+    
+    const viewMode = document.getElementById('viewModeSelect').value;
+    const showRelease = document.getElementById('showReleasePoint').checked;
+    const showTunnel = document.getElementById('showTunnelPoint').checked;
+    const showBreak = document.getElementById('showBreakPoint').checked;
+    const showPlate = document.getElementById('showPlate').checked;
+    
+    const traces = [];
+    const trajectories = data.trajectories;
+    
+    // Group trajectories by pitch type
+    const trajectoriesByType = {};
+    trajectories.forEach(traj => {
+        const type = traj.pitch_type || 'UN';
+        if (!trajectoriesByType[type]) {
+            trajectoriesByType[type] = [];
+        }
+        trajectoriesByType[type].push(traj);
+    });
+    
+    // Create trajectory traces
+    Object.keys(trajectoriesByType).forEach(pitchType => {
+        const typeTrajs = trajectoriesByType[pitchType];
+        const color = PITCH_COLORS[pitchType] || '#999999';
+        
+        // Sample a few representative trajectories (not all for performance)
+        const sampleSize = Math.min(5, typeTrajs.length);
+        const sampled = typeTrajs.slice(0, sampleSize);
+        
+        sampled.forEach((traj, idx) => {
+            const points = traj.points || [];
+            if (points.length === 0) return;
+            
+            // Extract coordinates based on view mode
+            let x, y, z, xLabel, yLabel, zLabel;
+            
+            if (viewMode === '3d') {
+                // 3D view: X (horizontal), Y (depth), Z (vertical)
+                x = points.map(p => p.x);
+                y = points.map(p => p.y);
+                z = points.map(p => p.z);
+                xLabel = 'Horizontal (ft)';
+                yLabel = 'Distance from Plate (ft)';
+                zLabel = 'Height (ft)';
+            } else if (viewMode === 'top') {
+                // Top view: X (horizontal) vs Y (depth)
+                x = points.map(p => p.x);
+                y = points.map(p => p.y);
+                z = points.map(p => p.z);
+                xLabel = 'Horizontal (ft)';
+                yLabel = 'Distance from Plate (ft)';
+                zLabel = 'Height (ft)';
+            } else if (viewMode === 'side') {
+                // Side view: Y (depth) vs Z (height)
+                x = points.map(p => p.y);
+                y = points.map(p => p.z);
+                z = points.map(p => p.x);
+                xLabel = 'Distance from Plate (ft)';
+                yLabel = 'Height (ft)';
+                zLabel = 'Horizontal (ft)';
+            } else { // batter view
+                // Batter's view: X (horizontal) vs Z (height)
+                x = points.map(p => p.x);
+                y = points.map(p => p.z);
+                z = points.map(p => p.y);
+                xLabel = 'Horizontal (ft)';
+                yLabel = 'Height (ft)';
+                zLabel = 'Distance from Plate (ft)';
+            }
+            
+            const opacity = idx === 0 ? 0.8 : 0.4;
+            
+            traces.push({
+                x: x,
+                y: y,
+                z: viewMode === '3d' ? z : undefined,
+                type: viewMode === '3d' ? 'scatter3d' : 'scatter',
+                mode: 'lines',
+                name: idx === 0 ? pitchType : undefined,
+                line: {
+                    color: color,
+                    width: 3,
+                    opacity: opacity
+                },
+                showlegend: idx === 0,
+                hovertemplate: `<b>${pitchType}</b><br>` +
+                    `${xLabel}: %{x:.2f}<br>` +
+                    `${yLabel}: %{y:.2f}<br>` +
+                    (viewMode === '3d' ? `${zLabel}: %{z:.2f}<br>` : '') +
+                    '<extra></extra>'
+            });
+        });
+    });
+    
+    // Add marker points
+    if (showRelease || showTunnel || showBreak || showPlate) {
+        Object.keys(trajectoriesByType).forEach(pitchType => {
+            const typeTrajs = trajectoriesByType[pitchType];
+            const color = PITCH_COLORS[pitchType] || '#999999';
+            const sampleTraj = typeTrajs[0];
+            
+            if (!sampleTraj) return;
+            
+            const markers = [];
+            
+            if (showRelease && sampleTraj.release_point) {
+                markers.push({
+                    point: sampleTraj.release_point,
+                    label: 'Release',
+                    symbol: 'circle',
+                    size: 8
+                });
+            }
+            
+            if (showTunnel && sampleTraj.tunnel_point) {
+                markers.push({
+                    point: sampleTraj.tunnel_point,
+                    label: 'Tunnel',
+                    symbol: 'diamond',
+                    size: 10
+                });
+            }
+            
+            if (showBreak && sampleTraj.break_point) {
+                markers.push({
+                    point: sampleTraj.break_point,
+                    label: 'Break',
+                    symbol: 'square',
+                    size: 8
+                });
+            }
+            
+            if (showPlate && sampleTraj.plate_point) {
+                markers.push({
+                    point: sampleTraj.plate_point,
+                    label: 'Plate',
+                    symbol: 'x',
+                    size: 10
+                });
+            }
+            
+            markers.forEach(marker => {
+                let x, y, z;
+                
+                if (viewMode === '3d') {
+                    x = marker.point.x;
+                    y = marker.point.y;
+                    z = marker.point.z;
+                } else if (viewMode === 'top') {
+                    x = marker.point.x;
+                    y = marker.point.y;
+                    z = marker.point.z;
+                } else if (viewMode === 'side') {
+                    x = marker.point.y;
+                    y = marker.point.z;
+                    z = marker.point.x;
+                } else {
+                    x = marker.point.x;
+                    y = marker.point.z;
+                    z = marker.point.y;
+                }
+                
+                traces.push({
+                    x: [x],
+                    y: [y],
+                    z: viewMode === '3d' ? [z] : undefined,
+                    type: viewMode === '3d' ? 'scatter3d' : 'scatter',
+                    mode: 'markers+text',
+                    name: `${pitchType} - ${marker.label}`,
+                    marker: {
+                        color: color,
+                        size: marker.size,
+                        symbol: marker.symbol,
+                        line: { color: 'var(--color-main-bg)', width: 1 }
+                    },
+                    text: [marker.label],
+                    textposition: 'top center',
+                    showlegend: false,
+                    hovertemplate: `<b>${marker.label}</b><br>` +
+                        `${xLabel}: %{x:.2f}<br>` +
+                        `${yLabel}: %{y:.2f}<br>` +
+                        (viewMode === '3d' ? `${zLabel}: %{z:.2f}<br>` : '') +
+                        '<extra></extra>'
+                });
+            });
+        });
+    }
+    
+    const layout = {
+        title: {
+            text: `Pitch Tunnel Analysis — ${data.pitcher}`,
+            font: { size: 18, color: 'var(--color-text-primary)' }
+        },
+        scene: viewMode === '3d' ? {
+            xaxis: { title: xLabel, color: 'var(--color-text-muted)', gridcolor: 'var(--color-border)', backgroundcolor: 'var(--color-surface)' },
+            yaxis: { title: yLabel, color: 'var(--color-text-muted)', gridcolor: 'var(--color-border)', backgroundcolor: 'var(--color-surface)' },
+            zaxis: { title: zLabel, color: 'var(--color-text-muted)', gridcolor: 'var(--color-border)', backgroundcolor: 'var(--color-surface)' },
+            bgcolor: 'var(--color-surface)',
+            camera: {
+                eye: { x: 1.5, y: 1.5, z: 1.5 }
+            }
+        } : undefined,
+        xaxis: viewMode !== '3d' ? {
+            title: xLabel,
+            color: 'var(--color-text-muted)',
+            gridcolor: 'var(--color-border)',
+            zeroline: true,
+            zerolinecolor: 'var(--color-text-tertiary)'
+        } : undefined,
+        yaxis: viewMode !== '3d' ? {
+            title: yLabel,
+            color: 'var(--color-text-muted)',
+            gridcolor: 'var(--color-border)',
+            zeroline: true,
+            zerolinecolor: 'var(--color-text-tertiary)'
+        } : undefined,
+        plot_bgcolor: 'var(--color-surface)',
+        paper_bgcolor: 'var(--color-surface)',
+        font: { color: 'var(--color-text-muted)' },
+        legend: {
+            bgcolor: 'var(--color-surface-muted)',
+            bordercolor: 'var(--color-border-strong)',
+            borderwidth: 1,
+            font: { color: 'var(--color-text-muted)' }
+        },
+        hovermode: 'closest',
+        showlegend: true
+    };
+    
+    const config = {
+        responsive: true,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d'],
+        displaylogo: false
+    };
+    
+    Plotly.newPlot(chartDiv, traces, layout, config);
+    currentPlot = chartDiv;
+    
+    // Show plot controls
+    document.getElementById('resetView').style.display = 'inline-flex';
+    document.getElementById('toggleAnimation').style.display = 'inline-flex';
+    
+    // Update info
+    const tunnelStats = data.tunnel_stats || {};
+    infoDiv.innerHTML = `
+        <div class="tunnel-stats">
+            <h3>Tunnel Statistics</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-label">Tunnel Distance:</span>
+                    <span class="stat-value">${data.tunnel_distance || 23} ft</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Trajectories Shown:</span>
+                    <span class="stat-value">${trajectories.length}</span>
+                </div>
+                ${tunnelStats.avg_separation ? `
+                <div class="stat-item">
+                    <span class="stat-label">Avg Separation at Tunnel:</span>
+                    <span class="stat-value">${tunnelStats.avg_separation.toFixed(2)} ft</span>
+                </div>
+                ` : ''}
+                ${tunnelStats.avg_break_start ? `
+                <div class="stat-item">
+                    <span class="stat-label">Avg Break Start:</span>
+                    <span class="stat-value">${tunnelStats.avg_break_start.toFixed(2)} ft</span>
+                </div>
+                ` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function resetView() {
+    if (currentPlot) {
+        Plotly.relayout(currentPlot, {
+            'scene.camera': { eye: { x: 1.5, y: 1.5, z: 1.5 } }
+        });
+    }
+}
+
+function toggleAnimation() {
+    if (animationInterval) {
+        stopAnimation();
+    } else {
+        startAnimation();
+    }
+}
+
+function startAnimation() {
+    if (!tunnelData || !currentPlot) return;
+    
+    animationFrame = 0;
+    const animationText = document.getElementById('animationText');
+    if (animationText) {
+        animationText.textContent = 'Stop';
+    }
+    
+    const btn = document.getElementById('toggleAnimation');
+    if (btn) {
+        btn.querySelector('i').classList.remove('fa-play');
+        btn.querySelector('i').classList.add('fa-pause');
+    }
+    
+    // Animate camera rotation
+    animationInterval = setInterval(() => {
+        if (!currentPlot) {
+            stopAnimation();
+            return;
+        }
+        
+        animationFrame += 0.02;
+        const angle = animationFrame * Math.PI * 2;
+        const radius = 3;
+        const eye = {
+            x: Math.cos(angle) * radius,
+            y: Math.sin(angle) * radius,
+            z: 1.5
+        };
+        
+        Plotly.relayout(currentPlot, {
+            'scene.camera.eye': eye
+        });
+    }, 50);
+}
+
+function stopAnimation() {
+    if (animationInterval) {
+        clearInterval(animationInterval);
+        animationInterval = null;
+    }
+    
+    const animationText = document.getElementById('animationText');
+    if (animationText) {
+        animationText.textContent = 'Animate';
+    }
+    
+    const btn = document.getElementById('toggleAnimation');
+    if (btn) {
+        btn.querySelector('i').classList.remove('fa-pause');
+        btn.querySelector('i').classList.add('fa-play');
+    }
+}
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+    font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--color-text-primary);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-page-bg) 85%, white), var(--color-page-bg));
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.back-button:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.pitch-tunnel-controls {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.control-group-full {
+    grid-column: 1 / -1;
+}
+
+.control-label {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.control-input,
+.control-select {
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    padding: 0.75rem;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.control-select[multiple] {
+    min-height: 120px;
+    padding: 0.5rem;
+}
+
+.control-select[multiple] option {
+    padding: 0.5rem;
+    margin: 0.25rem 0;
+}
+
+.control-select[multiple] option:checked {
+    background: var(--color-accent);
+    color: var(--color-text-primary);
+}
+
+.control-input:focus,
+.control-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px rgba(255, 127, 0, 0.2);
+}
+
+.control-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.player-search-container {
+    position: relative;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    margin-top: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.player-dropdown-item {
+    padding: 0.75rem 1rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-surface-muted);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-top: 0.5rem;
+}
+
+.selected-player-display span {
+    color: var(--color-text-primary);
+    font-weight: 500;
+}
+
+.clear-player-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    background: var(--color-surface-muted);
+    color: var(--color-text-primary);
+}
+
+.generate-btn {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-glow) 100%);
+    border: none;
+    border-radius: 8px;
+    padding: 1rem 2rem;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 0.5rem;
+}
+
+.generate-btn:hover:not(.disabled):not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.4);
+}
+
+.generate-btn.disabled,
+.generate-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pitch-tunnel-container {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: var(--shadow-floating);
+}
+
+.pitch-tunnel-wrapper {
+    width: 100%;
+}
+
+.plot-controls {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    justify-content: flex-end;
+}
+
+.plot-control-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--color-layer-soft);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.plot-control-btn:hover {
+    background: color-mix(in srgb, var(--color-layer-soft) 90%, var(--color-surface));
+    border-color: var(--color-border-strong);
+}
+
+.pitch-tunnel-chart {
+    width: 100%;
+    min-height: 700px;
+    background: var(--color-layer-soft);
+    border-radius: 14px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.pitch-tunnel-info {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.pitch-tunnel-info p {
+    color: var(--color-text-muted);
+    margin: 0;
+}
+
+.tunnel-stats {
+    color: var(--color-text-muted);
+}
+
+.tunnel-stats h3 {
+    color: var(--color-text-primary);
+    margin: 0 0 1rem 0;
+    font-size: 1.2rem;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: var(--color-layer-soft);
+    border-radius: 6px;
+    border: 1px solid var(--color-layer-border);
+}
+
+.stat-label {
+    color: var(--color-text-muted);
+}
+
+.stat-value {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .header-content {
+        flex-direction: column;
+    }
+    
+    .pitch-tunnel-controls {
+        grid-template-columns: 1fr;
+    }
+    
+    .pitch-tunnel-chart {
+        min-height: 500px;
+    }
+}
+</style>
+
+{% endblock %}
+

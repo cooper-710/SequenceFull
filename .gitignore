@@ -1,0 +1,39 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*.so
+*.dylib
+*.log
+*.sqlite*
+# Python virtual environments
+venv/
+.venv/
+
+# Build artifacts and caches
+build/
+src/build/
+RHH/
+src/RHH/
+src/LHH/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node/Electron artifacts
+desktop-app/node_modules/
+desktop-app/dist/
+desktop-app/build/
+desktop-app/.vite/
+
+# Secrets/tokens
+build/token.txt
+
+# Config files with sensitive data
+config/settings.json
+server.log
+
+# Local environment files
+.env
+.env.*
+

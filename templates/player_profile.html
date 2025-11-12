@@ -1,0 +1,503 @@
+{% extends "base.html" %}
+
+{% block title %}Player Profile - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div id="loadingIndicator" class="loading-indicator">
+        <div class="spinner"></div>
+        <span>Loading player profile...</span>
+    </div>
+    
+    <div id="errorMessage" class="error-message" style="display: none;"></div>
+    
+    <div id="playerContent" style="display: none;">
+        <!-- Player Header -->
+        <div class="player-header">
+            <div class="player-header-content">
+                <div class="player-info-main">
+                    <h1 id="playerName">—</h1>
+                    <div class="player-meta">
+                        <span id="playerTeam" class="team-badge">—</span>
+                        <span id="playerPosition">—</span>
+                        <span id="playerJersey">#—</span>
+                    </div>
+                </div>
+                <div class="player-bio">
+                    <div class="bio-item">
+                        <span class="bio-label">Height:</span>
+                        <span id="playerHeight">—</span>
+                    </div>
+                    <div class="bio-item">
+                        <span class="bio-label">Weight:</span>
+                        <span id="playerWeight">—</span>
+                    </div>
+                    <div class="bio-item">
+                        <span class="bio-label">Bats:</span>
+                        <span id="playerHandedness">—</span>
+                    </div>
+                    <div class="bio-item">
+                        <span class="bio-label">Debut:</span>
+                        <span id="playerDebut">—</span>
+                    </div>
+                </div>
+            </div>
+            <div class="player-actions">
+                <a id="generateReportBtn" href="#" class="btn btn-primary">
+                    <i class="fas fa-file-pdf"></i> Generate Scouting Report
+                </a>
+            </div>
+        </div>
+
+        <!-- Stats Tabs -->
+        <div class="stats-container">
+            <div class="stats-tabs">
+                <button class="tab-btn active" data-tab="current">Current Season</button>
+                <button class="tab-btn" data-tab="career">Career</button>
+                <button class="tab-btn" data-tab="history">Season History</button>
+            </div>
+            
+            <div class="tab-content active" id="currentTab">
+                <div class="stats-grid" id="currentStats">
+                    <!-- Current season stats will be populated here -->
+                </div>
+            </div>
+            
+            <div class="tab-content" id="careerTab">
+                <div class="stats-grid" id="careerStats">
+                    <!-- Career stats will be populated here -->
+                </div>
+            </div>
+            
+            <div class="tab-content" id="historyTab">
+                <div class="table-container">
+                    <table class="seasons-table">
+                        <thead>
+                            <tr>
+                                <th>Season</th>
+                                <th>G</th>
+                                <th>AB</th>
+                                <th>H</th>
+                                <th>HR</th>
+                                <th>RBI</th>
+                                <th>R</th>
+                                <th>SB</th>
+                                <th>BB</th>
+                                <th>SO</th>
+                                <th>AVG</th>
+                                <th>OBP</th>
+                                <th>SLG</th>
+                                <th>OPS</th>
+                            </tr>
+                        </thead>
+                        <tbody id="seasonsTableBody">
+                            <tr><td colspan="14" class="empty-state">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.loading-indicator {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--color-text-subtle);
+}
+
+.spinner {
+    border: 3px solid var(--color-border);
+    border-top: 3px solid var(--color-accent);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 20px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-message {
+    background: color-mix(in srgb, var(--color-danger) 35%, var(--color-surface));
+    border: 1px solid var(--color-danger);
+    border-radius: 6px;
+    padding: 16px;
+    margin: 24px;
+    color: color-mix(in srgb, var(--color-danger) 70%, var(--color-danger-soft));
+}
+
+.player-header {
+    background: var(--color-surface);
+    border-radius: 8px;
+    padding: 32px;
+    margin-bottom: 24px;
+}
+
+.player-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 24px;
+}
+
+.player-info-main h1 {
+    font-size: 36px;
+    margin-bottom: 12px;
+    color: var(--color-text-primary);
+}
+
+.player-meta {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.team-badge {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.player-bio {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.bio-item {
+    display: flex;
+    gap: 8px;
+}
+
+.bio-label {
+    color: var(--color-text-subtle);
+}
+
+.player-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.stats-container {
+    background: var(--color-surface);
+    border-radius: 8px;
+    padding: 24px;
+}
+
+.stats-tabs {
+    display: flex;
+    gap: 8px;
+    border-bottom: 2px solid var(--color-border);
+    margin-bottom: 24px;
+}
+
+.tab-btn {
+    padding: 12px 24px;
+    background: transparent;
+    border: none;
+    color: var(--color-text-subtle);
+    cursor: pointer;
+    font-size: 16px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+
+.tab-btn:hover {
+    color: var(--color-text-primary);
+}
+
+.tab-btn.active {
+    color: var(--color-accent);
+    border-bottom-color: var(--color-accent);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.stat-card {
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    padding: 16px;
+}
+
+.stat-label {
+    color: var(--color-text-subtle);
+    font-size: 14px;
+    margin-bottom: 8px;
+}
+
+.stat-value {
+    color: var(--color-text-primary);
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.seasons-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.seasons-table thead {
+    background: var(--color-surface-alt);
+}
+
+.seasons-table th {
+    padding: 12px;
+    text-align: right;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    font-size: 14px;
+    border-bottom: 2px solid var(--color-border);
+}
+
+.seasons-table th:first-child {
+    text-align: left;
+}
+
+.seasons-table td {
+    padding: 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--color-surface-muted);
+    color: var(--color-text-secondary);
+}
+
+.seasons-table td:first-child {
+    text-align: left;
+    font-weight: 500;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px;
+    color: var(--color-text-subtle);
+}
+</style>
+
+<script>
+const playerId = '{{ player_id }}';
+
+async function loadPlayerProfile() {
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    const playerContent = document.getElementById('playerContent');
+    
+    try {
+        // Load player data
+        const playerResponse = await fetch(`/api/players/${playerId}`);
+        const playerData = await playerResponse.json();
+        
+        if (playerData.error) {
+            throw new Error(playerData.error);
+        }
+        
+        // Load season stats
+        const statsResponse = await fetch(`/api/players/${playerId}/stats`);
+        const statsData = await statsResponse.json();
+        
+        displayPlayer(playerData.player, playerData.current_season);
+        displayStats(statsData.seasons || []);
+        
+        // Update generate report button
+        const generateBtn = document.getElementById('generateReportBtn');
+        if (playerData.player && playerData.player.name) {
+            const playerName = encodeURIComponent(playerData.player.name);
+            generateBtn.href = `/scouting-report?player=${playerName}`;
+        }
+        
+        loadingIndicator.style.display = 'none';
+        playerContent.style.display = 'block';
+        
+    } catch (error) {
+        loadingIndicator.style.display = 'none';
+        errorMessage.textContent = `Error loading player: ${error.message}`;
+        errorMessage.style.display = 'block';
+    }
+}
+
+function displayPlayer(player, currentSeason) {
+    document.getElementById('playerName').textContent = player.name || '—';
+    document.getElementById('playerTeam').textContent = player.team_abbr || '—';
+    document.getElementById('playerPosition').textContent = player.position || '—';
+    document.getElementById('playerJersey').textContent = player.jersey_number ? `#${player.jersey_number}` : '#—';
+    document.getElementById('playerHeight').textContent = player.height || '—';
+    document.getElementById('playerWeight').textContent = player.weight ? `${player.weight} lbs` : '—';
+    document.getElementById('playerHandedness').textContent = player.handedness || '—';
+    document.getElementById('playerDebut').textContent = player.debut_date ? new Date(player.debut_date).getFullYear() : '—';
+    
+    // Display current season stats
+    if (currentSeason) {
+        displayCurrentSeasonStats(currentSeason);
+    } else {
+        document.getElementById('currentStats').innerHTML = '<div class="empty-state">No current season stats available</div>';
+    }
+}
+
+function displayCurrentSeasonStats(stats) {
+    const statsGrid = document.getElementById('currentStats');
+    const statFields = [
+        { label: 'Games', value: stats.games },
+        { label: 'At Bats', value: stats.at_bats },
+        { label: 'Hits', value: stats.hits },
+        { label: 'Home Runs', value: stats.home_runs },
+        { label: 'RBI', value: stats.rbi },
+        { label: 'Runs', value: stats.runs },
+        { label: 'Stolen Bases', value: stats.stolen_bases },
+        { label: 'Walks', value: stats.walks },
+        { label: 'Strikeouts', value: stats.strikeouts },
+        { label: 'AVG', value: stats.avg, format: 'avg' },
+        { label: 'OBP', value: stats.obp, format: 'avg' },
+        { label: 'SLG', value: stats.slg, format: 'avg' },
+        { label: 'OPS', value: stats.ops, format: 'avg' },
+    ];
+    
+    statsGrid.innerHTML = statFields.map(stat => {
+        let value = stat.value ?? '—';
+        if (stat.format === 'avg' && typeof value === 'number') {
+            value = value.toFixed(3);
+        }
+        return `
+            <div class="stat-card">
+                <div class="stat-label">${stat.label}</div>
+                <div class="stat-value">${value}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function displayStats(seasons) {
+    // Calculate career totals
+    const careerStats = seasons.reduce((acc, season) => {
+        acc.games = (acc.games || 0) + (season.games || 0);
+        acc.at_bats = (acc.at_bats || 0) + (season.at_bats || 0);
+        acc.hits = (acc.hits || 0) + (season.hits || 0);
+        acc.home_runs = (acc.home_runs || 0) + (season.home_runs || 0);
+        acc.rbi = (acc.rbi || 0) + (season.rbi || 0);
+        acc.runs = (acc.runs || 0) + (season.runs || 0);
+        acc.stolen_bases = (acc.stolen_bases || 0) + (season.stolen_bases || 0);
+        acc.walks = (acc.walks || 0) + (season.walks || 0);
+        acc.strikeouts = (acc.strikeouts || 0) + (season.strikeouts || 0);
+        return acc;
+    }, {});
+    
+    // Calculate career averages
+    if (careerStats.at_bats > 0) {
+        careerStats.avg = careerStats.hits / careerStats.at_bats;
+    }
+    // OBP and SLG would need more detailed calculation, use averages for now
+    if (seasons.length > 0) {
+        const avgObp = seasons.reduce((sum, s) => sum + (s.obp || 0), 0) / seasons.length;
+        const avgSlg = seasons.reduce((sum, s) => sum + (s.slg || 0), 0) / seasons.length;
+        careerStats.obp = avgObp;
+        careerStats.slg = avgSlg;
+        careerStats.ops = avgObp + avgSlg;
+    }
+    
+    displayCareerStats(careerStats);
+    displaySeasonHistory(seasons);
+}
+
+function displayCareerStats(stats) {
+    const statsGrid = document.getElementById('careerStats');
+    const statFields = [
+        { label: 'Games', value: stats.games },
+        { label: 'At Bats', value: stats.at_bats },
+        { label: 'Hits', value: stats.hits },
+        { label: 'Home Runs', value: stats.home_runs },
+        { label: 'RBI', value: stats.rbi },
+        { label: 'Runs', value: stats.runs },
+        { label: 'Stolen Bases', value: stats.stolen_bases },
+        { label: 'Walks', value: stats.walks },
+        { label: 'Strikeouts', value: stats.strikeouts },
+        { label: 'AVG', value: stats.avg, format: 'avg' },
+        { label: 'OBP', value: stats.obp, format: 'avg' },
+        { label: 'SLG', value: stats.slg, format: 'avg' },
+        { label: 'OPS', value: stats.ops, format: 'avg' },
+    ];
+    
+    statsGrid.innerHTML = statFields.map(stat => {
+        let value = stat.value ?? '—';
+        if (stat.format === 'avg' && typeof value === 'number') {
+            value = value.toFixed(3);
+        }
+        return `
+            <div class="stat-card">
+                <div class="stat-label">${stat.label}</div>
+                <div class="stat-value">${value}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function displaySeasonHistory(seasons) {
+    const tableBody = document.getElementById('seasonsTableBody');
+    
+    if (seasons.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="14" class="empty-state">No season history available</td></tr>';
+        return;
+    }
+    
+    tableBody.innerHTML = seasons.map(season => {
+        const formatAvg = (val) => val != null ? val.toFixed(3) : '—';
+        return `
+            <tr>
+                <td>${season.season}</td>
+                <td>${season.games ?? '—'}</td>
+                <td>${season.at_bats ?? '—'}</td>
+                <td>${season.hits ?? '—'}</td>
+                <td>${season.home_runs ?? '—'}</td>
+                <td>${season.rbi ?? '—'}</td>
+                <td>${season.runs ?? '—'}</td>
+                <td>${season.stolen_bases ?? '—'}</td>
+                <td>${season.walks ?? '—'}</td>
+                <td>${season.strikeouts ?? '—'}</td>
+                <td>${formatAvg(season.avg)}</td>
+                <td>${formatAvg(season.obp)}</td>
+                <td>${formatAvg(season.slg)}</td>
+                <td>${formatAvg(season.ops)}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Tab switching
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const tabName = this.dataset.tab;
+            
+            // Update active tab button
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Update active tab content
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.getElementById(`${tabName}Tab`).classList.add('active');
+        });
+    });
+    
+    loadPlayerProfile();
+});
+</script>
+{% endblock %}
+

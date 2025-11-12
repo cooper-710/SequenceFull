@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Mocap - Sequence BioLab Analytics{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Override page-container for fullscreen mocap */
+    .page-container {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .page-header {
+        display: none; /* Hide header for fullscreen */
+    }
+    
+    .content-wrapper {
+        background: transparent !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        flex: 1;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+    }
+    
+    .mocap-wrapper {
+        width: 100%;
+        height: 100%;
+        position: relative;
+    }
+    
+    .mocap-iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        display: block;
+    }
+    
+    .mocap-loading {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: var(--text-secondary);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>Mocap</h1>
+        <p class="page-subtitle">Motion Capture Analysis & Biomechanics</p>
+    </div>
+
+    <div class="content-wrapper">
+        <div class="mocap-wrapper">
+            <iframe 
+                id="mocap-iframe"
+                class="mocap-iframe" 
+                src="{{ motion_app_url }}"
+                allowfullscreen
+                loading="lazy">
+                <div class="mocap-loading">
+                    <p>Loading motion capture analysis...</p>
+                </div>
+            </iframe>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Handle iframe loading
+    const iframe = document.getElementById('mocap-iframe');
+    
+    iframe.addEventListener('load', function() {
+        console.log('Motion webapp loaded successfully');
+    });
+    
+    iframe.addEventListener('error', function() {
+        console.error('Failed to load motion webapp');
+    });
+</script>
+{% endblock %}

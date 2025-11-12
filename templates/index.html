@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sequence - Scouting Report Generator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo-container">
+                <img src="{{ url_for('static', filename='sequence-logo.png') }}" alt="Sequence Logo" class="logo">
+            </div>
+            <h1>Sequence BioLab Analytics</h1>
+            <p class="subtitle">Scouting Report Generator</p>
+        </header>
+
+        <main>
+            <div class="form-container">
+                <form id="reportForm">
+                    <div class="form-group">
+                        <label>Players *</label>
+                        <div id="playersContainer">
+                            <!-- Player rows will be dynamically added here -->
+                        </div>
+                        <button type="button" id="addPlayerBtn" class="btn-add-player">+ Add Player</button>
+                        <small>Enter player name, team, and opponent for each player. Team and Opponent are optional.</small>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="season_start">Season Start</label>
+                            <input 
+                                type="date" 
+                                id="season_start" 
+                                name="season_start" 
+                                value="2025-03-20"
+                            >
+                        </div>
+                    </div>
+
+                    <div class="form-group checkbox-group">
+                        <label>
+                            <input 
+                                type="checkbox" 
+                                id="use_next_series" 
+                                name="use_next_series"
+                            >
+                            <span>Use next series instead of next game</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" id="generateBtn" class="btn btn-primary">
+                        <span class="btn-text">Generate Report</span>
+                    </button>
+                </form>
+            </div>
+
+            <div id="statusContainer" class="status-container" style="display: none;">
+                <div class="status-card">
+                    <div class="status-header">
+                        <h3>Generation Status</h3>
+                        <button id="closeStatus" class="btn-close">×</button>
+                    </div>
+                    <div id="statusContent" class="status-content">
+                        <div class="loading-container">
+                            <div class="progress-bar">
+                                <div id="progressFill" class="progress-fill"></div>
+                            </div>
+                            <div id="statusMessage" class="status-message-simple">Preparing...</div>
+                        </div>
+                    </div>
+                    <div id="downloadSection" class="download-section" style="display: none;">
+                        <div id="singleDownload" style="display: none;">
+                            <a id="downloadLink" href="#" class="btn btn-success">📥 Download Report</a>
+                        </div>
+                        <div id="batchDownloads" style="display: none;">
+                            <div class="section-header">
+                                <span class="section-icon">✅</span>
+                                <h4>Generated Reports</h4>
+                                <span id="reportCount" class="report-count"></span>
+                            </div>
+                            <div id="batchDownloadsList" class="reports-list"></div>
+                        </div>
+                        <div id="batchErrors" style="display: none; margin-top: 16px;">
+                            <div class="section-header error-header">
+                                <span class="section-icon">⚠️</span>
+                                <h4>Errors</h4>
+                                <span id="errorCount" class="report-count error-text"></span>
+                            </div>
+                            <div id="batchErrorsList" class="errors-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="errorContainer" class="error-container" style="display: none;">
+                <div class="error-message">
+                    <strong>Error:</strong> <span id="errorText"></span>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Sequence Scouting Report Engine v1.0</p>
+        </footer>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let statusInterval = null;
+        let playerRowCount = 0;
+
+        // Create a player row
+        function createPlayerRow() {
+            playerRowCount++;
+            const rowId = `player-${playerRowCount}`;
+            const container = document.getElementById('playersContainer');
+            
+            const row = document.createElement('div');
+            row.className = 'player-row';
+            row.id = rowId;
+            
+            const hideStyle = playerRowCount === 1 ? 'style="display: none;"' : '';
+            row.innerHTML = `
+                <div class="form-group">
+                    <label for="${rowId}-name">Player Name *</label>
+                    <input 
+                        type="text" 
+                        id="${rowId}-name" 
+                        placeholder="e.g., Pete Alonso"
+                        required
+                        autocomplete="off"
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="${rowId}-team">Team</label>
+                    <input 
+                        type="text" 
+                        id="${rowId}-team" 
+                        placeholder="AUTO"
+                        autocomplete="off"
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="${rowId}-opponent">Opponent</label>
+                    <input 
+                        type="text" 
+                        id="${rowId}-opponent" 
+                        placeholder="e.g., NYY"
+                        autocomplete="off"
+                    >
+                </div>
+                <button type="button" class="btn-remove-player" onclick="removePlayerRow('${rowId}')" ${hideStyle}>×</button>
+            `;
+            
+            container.appendChild(row);
+            return rowId;
+        }
+
+        // Remove a player row (needs to be global for onclick)
+        window.removePlayerRow = function(rowId) {
+            const row = document.getElementById(rowId);
+            if (row) {
+                row.remove();
+                // Update remove button visibility
+                const rows = document.querySelectorAll('.player-row');
+                if (rows.length === 1) {
+                    const removeBtn = rows[0].querySelector('.btn-remove-player');
+                    if (removeBtn) {
+                        removeBtn.style.display = 'none';
+                    }
+                }
+            }
+        }
+
+        // Get all player entries
+        function getPlayerEntries() {
+            const rows = document.querySelectorAll('.player-row');
+            const entries = [];
+            
+            rows.forEach(row => {
+                const nameInput = row.querySelector('input[id$="-name"]');
+                const teamInput = row.querySelector('input[id$="-team"]');
+                const opponentInput = row.querySelector('input[id$="-opponent"]');
+                
+                if (!nameInput) return;
+                
+                const name = nameInput.value.trim();
+                const team = teamInput ? teamInput.value.trim() : '';
+                const opponent = opponentInput ? opponentInput.value.trim() : '';
+                
+                if (name) {
+                    let entry = name;
+                    if (team || opponent) {
+                        entry += ' | ' + (team || '');
+                        if (opponent) {
+                            entry += ' | ' + opponent;
+                        }
+                    }
+                    entries.push(entry);
+                }
+            });
+            
+            return entries;
+        }
+
+        // Initialize with one player row
+        document.addEventListener('DOMContentLoaded', () => {
+            createPlayerRow();
+            
+            // Add player button
+            document.getElementById('addPlayerBtn').addEventListener('click', () => {
+                const rowId = createPlayerRow();
+                // Show remove buttons when there's more than one row
+                document.querySelectorAll('.btn-remove-player').forEach(btn => {
+                    btn.style.display = 'flex';
+                });
+            });
+        });
+
+        document.getElementById('reportForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // Get player entries from individual boxes
+            const entries = getPlayerEntries();
+            
+            if (entries.length === 0) {
+                showError('Please enter at least one player name');
+                return;
+            }
+            
+            // Count how many entries we have (for batch detection)
+            const isBatch = entries.length > 1;
+
+            // Build the hitter_names string in the format expected by backend
+            const hitterNamesInput = entries.join('\n');
+            
+            const seasonStart = document.getElementById('season_start').value;
+            const useNextSeries = document.getElementById('use_next_series').checked;
+
+            // Show status container
+            document.getElementById('statusContainer').style.display = 'block';
+            document.getElementById('errorContainer').style.display = 'none';
+            document.getElementById('downloadSection').style.display = 'none';
+            document.getElementById('singleDownload').style.display = 'none';
+            document.getElementById('batchDownloads').style.display = 'none';
+            document.getElementById('batchErrors').style.display = 'none';
+            document.getElementById('generateBtn').disabled = true;
+            document.querySelector('.btn-text').textContent = isBatch ? 'Generating Reports...' : 'Generating...';
+
+            try {
+                const response = await fetch('/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        hitter_names: hitterNamesInput,
+                        team: 'AUTO', // Default, overridden by per-player settings
+                        season_start: seasonStart,
+                        use_next_series: useNextSeries,
+                        opponent_team: null // Default, overridden by per-player settings
+                    })
+                });
+
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error(`Server returned non-JSON response: ${text.substring(0, 200)}`);
+                }
+
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to start report generation');
+                }
+
+                currentJobId = data.job_id;
+                startStatusPolling(currentJobId, data.is_batch || false);
+
+            } catch (error) {
+                showError(error.message);
+                resetForm();
+            }
+        });
+
+        function startStatusPolling(jobId, isBatch) {
+            if (statusInterval) {
+                clearInterval(statusInterval);
+            }
+
+            statusInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/status/${jobId}`);
+                    
+                    // Check if response is JSON
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        console.error('Non-JSON response from status endpoint:', text.substring(0, 200));
+                        clearInterval(statusInterval);
+                        showError('Server returned invalid response');
+                        resetForm();
+                        return;
+                    }
+                    
+                    const data = await response.json();
+
+                    updateStatus(data, isBatch);
+
+                    if (data.status === 'completed') {
+                        clearInterval(statusInterval);
+                        if (isBatch && data.pdfs) {
+                            showBatchDownloads(data.pdfs, data.errors || []);
+                        } else {
+                            showDownload(data.pdf_filename);
+                        }
+                        resetForm();
+                    } else if (data.status === 'error') {
+                        clearInterval(statusInterval);
+                        showError(data.message);
+                        resetForm();
+                    }
+                } catch (error) {
+                    clearInterval(statusInterval);
+                    showError('Failed to check status: ' + error.message);
+                    resetForm();
+                }
+            }, 1000); // Poll every second
+        }
+
+        function updateStatus(status, isBatch) {
+            const statusMessage = document.getElementById('statusMessage');
+            const progressFill = document.getElementById('progressFill');
+            
+            // Update status message
+            statusMessage.textContent = status.message || status.status;
+            
+            // Update progress bar
+            if (isBatch && status.total) {
+                const completed = status.completed || 0;
+                const total = status.total;
+                const progressPercent = Math.round((completed / total) * 100);
+                progressFill.style.width = `${progressPercent}%`;
+                
+                if (status.status === 'running') {
+                    progressFill.className = 'progress-fill progress-running';
+                } else if (status.status === 'completed') {
+                    progressFill.className = 'progress-fill progress-completed';
+                } else if (status.status === 'error') {
+                    progressFill.className = 'progress-fill progress-error';
+                } else {
+                    progressFill.className = 'progress-fill progress-queued';
+                }
+            } else {
+                // Single report progress
+                if (status.status === 'queued') {
+                    progressFill.style.width = '10%';
+                    progressFill.className = 'progress-fill progress-queued';
+                } else if (status.status === 'running') {
+                    progressFill.style.width = '50%';
+                    progressFill.className = 'progress-fill progress-running';
+                } else if (status.status === 'completed') {
+                    progressFill.style.width = '100%';
+                    progressFill.className = 'progress-fill progress-completed';
+                } else if (status.status === 'error') {
+                    progressFill.style.width = '0%';
+                    progressFill.className = 'progress-fill progress-error';
+                }
+            }
+        }
+
+        function showDownload(filename) {
+            const downloadSection = document.getElementById('downloadSection');
+            const singleDownload = document.getElementById('singleDownload');
+            const downloadLink = document.getElementById('downloadLink');
+            downloadLink.href = `/download/${currentJobId}`;
+            downloadLink.download = filename;
+            singleDownload.style.display = 'block';
+            downloadSection.style.display = 'block';
+        }
+
+
+        function showBatchDownloads(pdfs, errors) {
+            const downloadSection = document.getElementById('downloadSection');
+            const batchDownloads = document.getElementById('batchDownloads');
+            const batchDownloadsList = document.getElementById('batchDownloadsList');
+            const batchErrors = document.getElementById('batchErrors');
+            const batchErrorsList = document.getElementById('batchErrorsList');
+            const reportCount = document.getElementById('reportCount');
+            const errorCount = document.getElementById('errorCount');
+            
+            // Clear previous content
+            batchDownloadsList.innerHTML = '';
+            batchErrorsList.innerHTML = '';
+            
+            // Show successful downloads
+            if (pdfs && pdfs.length > 0) {
+                batchDownloads.style.display = 'block';
+                reportCount.textContent = `${pdfs.length} report${pdfs.length > 1 ? 's' : ''}`;
+                
+                pdfs.forEach((pdf, index) => {
+                    const downloadItem = document.createElement('div');
+                    downloadItem.className = 'report-item';
+                    
+                    // Build meta info
+                    let metaParts = [];
+                    if (pdf.team && pdf.team !== 'AUTO') {
+                        metaParts.push(`Team: ${pdf.team}`);
+                    }
+                    if (pdf.opponent) {
+                        metaParts.push(`vs ${pdf.opponent}`);
+                    }
+                    const metaText = metaParts.join(' | ');
+                    
+                    downloadItem.innerHTML = `
+                        <div class="report-item-info">
+                            <div class="report-item-name">${pdf.player}</div>
+                            ${metaText ? `<div class="report-item-meta">${metaText}</div>` : ''}
+                        </div>
+                        <a href="/download/${currentJobId}/${index}" download="${pdf.filename}" 
+                           class="btn btn-success" 
+                           style="padding: 10px 20px; font-size: 0.9rem; text-decoration: none; display: inline-block; white-space: nowrap;">
+                            📥 Download
+                        </a>
+                    `;
+                    batchDownloadsList.appendChild(downloadItem);
+                });
+            }
+            
+            // Show errors if any
+            if (errors && errors.length > 0) {
+                batchErrors.style.display = 'block';
+                errorCount.textContent = `${errors.length} error${errors.length > 1 ? 's' : ''}`;
+                
+                errors.forEach(error => {
+                    const errorItem = document.createElement('div');
+                    errorItem.className = 'error-item';
+                    errorItem.innerHTML = `
+                        <strong style="color: var(--color-danger);">${error.player || 'Unknown'}:</strong>
+                        <span style="margin-left: 8px;">${error.error}</span>
+                    `;
+                    batchErrorsList.appendChild(errorItem);
+                });
+            }
+            
+            downloadSection.style.display = 'block';
+        }
+
+        function showError(message) {
+            document.getElementById('errorContainer').style.display = 'block';
+            document.getElementById('errorText').textContent = message;
+        }
+
+        function resetForm() {
+            document.getElementById('generateBtn').disabled = false;
+            document.querySelector('.btn-text').textContent = 'Generate Report';
+        }
+
+        document.getElementById('closeStatus').addEventListener('click', () => {
+            document.getElementById('statusContainer').style.display = 'none';
+            if (statusInterval) {
+                clearInterval(statusInterval);
+                statusInterval = null;
+            }
+            // Reset form to initial state
+            resetForm();
+        });
+    </script>
+</body>
+</html>
+

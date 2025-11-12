@@ -1,0 +1,232 @@
+{% extends "base.html" %}
+
+{% block title %}Profile Settings{% endblock %}
+
+{% block content %}
+<div class="page-container profile-settings">
+    <header class="section-hero">
+        <div class="section-hero-heading">
+            <h1 class="hero-content">Profile Settings</h1>
+        </div>
+    </header>
+
+    <div class="content-wrapper">
+        <section class="profile-panel profile-panel--primary">
+            <div class="panel-heading">
+                <div>
+                    <h2>Profile</h2>
+                    <p>Update the details your teammates see.</p>
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="profile-avatar-shell">
+                    <div class="profile-avatar-preview">
+                        <img
+                            src="{% if current_user and current_user.profile_image_path %}{{ url_for('static', filename=current_user.profile_image_path) }}{% else %}{{ url_for('static', filename='sequence-logo.png') }}{% endif %}"
+                            alt="Profile avatar"
+                        >
+                    </div>
+                    <div class="profile-avatar-actions">
+                        <form method="post" enctype="multipart/form-data" class="avatar-form" data-avatar-form novalidate>
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="form_name" value="avatar">
+                            <label class="file-input" data-avatar-trigger>
+                                <input
+                                    type="file"
+                                    id="profileImageInput"
+                                    name="profile_image"
+                                    accept="image/png,image/jpeg,image/jpg,image/gif,image/webp"
+                                    data-avatar-input
+                                >
+                                <span class="file-input-label">
+                                    <i class="fas fa-camera"></i>
+                                    <span data-avatar-label>Select photo</span>
+                                </span>
+                            </label>
+                            <p class="help-text" data-avatar-help>
+                                <span data-avatar-instructions>PNG, JPG, GIF, or WebP • 5&nbsp;MB max</span>
+                                <span class="file-meta" data-avatar-filemeta></span>
+                            </p>
+                            <div class="avatar-feedback" data-avatar-feedback aria-live="polite"></div>
+                            <button type="submit" class="btn btn-primary btn-ghost" data-avatar-submit>
+                                <i class="fas fa-upload" aria-hidden="true"></i>
+                                <span data-avatar-submit-label>Upload</span>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <form method="post" class="profile-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                    <input type="hidden" name="form_name" value="basic-info">
+                    <div class="field-group two-column">
+                        <label class="input-field">
+                            <span class="field-label">First name</span>
+                            <input type="text" name="first_name" value="{{ current_user.first_name }}" autocomplete="given-name" required>
+                        </label>
+                        <label class="input-field">
+                            <span class="field-label">Last name</span>
+                            <input type="text" name="last_name" value="{{ current_user.last_name }}" autocomplete="family-name" required>
+                        </label>
+                    </div>
+
+                    <div class="field-group two-column">
+                        <label class="input-field">
+                            <span class="field-label">Phone</span>
+                            <input type="tel" name="phone" value="{{ current_user.phone or '' }}" autocomplete="tel" placeholder="(555) 123-4567">
+                        </label>
+                        <label class="input-field">
+                            <span class="field-label">Timezone</span>
+                            <div class="select-wrapper">
+                                <select name="timezone">
+                                    <option value="">Select timezone</option>
+                                    {% for tz in timezones %}
+                                    <option value="{{ tz }}" {% if current_user.timezone == tz %}selected{% endif %}>{{ tz }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </label>
+                    </div>
+
+                    <label class="input-field">
+                        <span class="field-label">Bio</span>
+                        <textarea name="bio" rows="4" placeholder="Share context about your role, focus areas, and how teammates can best collaborate.">{{ current_user.bio or '' }}</textarea>
+                    </label>
+
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i>
+                            <span>Save profile</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <div class="profile-side-column">
+            <section class="profile-panel appearance-panel">
+                <div class="panel-heading">
+                    <div>
+                        <h2>Appearance</h2>
+                        <p>Choose a theme that suits your workflow.</p>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <form method="post" class="appearance-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="form_name" value="appearance">
+                        <div class="theme-toggle-row">
+                            <label class="theme-pill {% if app_theme == 'dark' %}is-active{% endif %}">
+                                <input type="radio" name="theme_preference" value="dark" {% if app_theme == 'dark' %}checked{% endif %} data-theme-choice>
+                                <span>
+                                    <i class="fas fa-moon"></i>
+                                    <span>Dark mode</span>
+                                </span>
+                            </label>
+                            <label class="theme-pill {% if app_theme == 'light' %}is-active{% endif %}">
+                                <input type="radio" name="theme_preference" value="light" {% if app_theme == 'light' %}checked{% endif %} data-theme-choice>
+                                <span>
+                                    <i class="fas fa-sun"></i>
+                                    <span>Light mode</span>
+                                </span>
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-secondary full-width">Save appearance</button>
+                    </form>
+                </div>
+            </section>
+
+            <section class="profile-panel notifications-panel">
+                <div class="panel-heading">
+                    <div>
+                        <h2>Notifications</h2>
+                        <p>Decide when Sequence should tap you on the shoulder.</p>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <form method="post" class="notifications-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="form_name" value="notifications">
+                        <div class="switch-card">
+                            <div class="switch-copy">
+                                <strong>Weekly digest</strong>
+                                <p>Highlights of new reports, notes, and upcoming opponents.</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" name="weekly_digest" {% if notification_prefs.weekly_digest %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="switch-card">
+                            <div class="switch-copy">
+                                <strong>Reports ready</strong>
+                                <p>Ping me as soon as a report finishes rendering.</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" name="reports_ready" {% if notification_prefs.reports_ready %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <div class="switch-card">
+                            <div class="switch-copy">
+                                <strong>System updates</strong>
+                                <p>Get alerted for maintenance windows or downtime.</p>
+                            </div>
+                            <label class="switch">
+                                <input type="checkbox" name="system_updates" {% if notification_prefs.system_updates %}checked{% endif %}>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary full-width">Save notifications</button>
+                    </form>
+                </div>
+            </section>
+
+            <section class="profile-panel security-panel">
+                <div class="panel-heading">
+                    <div>
+                        <h2>Security</h2>
+                        <p>Keep your account protected with a strong password.</p>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <form method="post" class="security-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <input type="hidden" name="form_name" value="change-password">
+                        <label class="input-field">
+                            <span class="field-label">Current password</span>
+                            <input type="password" name="current_password" autocomplete="current-password" required>
+                        </label>
+                        <div class="field-group two-column">
+                            <label class="input-field">
+                                <span class="field-label">New password</span>
+                                <input type="password" name="new_password" autocomplete="new-password" required>
+                            </label>
+                            <label class="input-field">
+                                <span class="field-label">Confirm password</span>
+                                <input type="password" name="confirm_password" autocomplete="new-password" required>
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-secondary full-width">Update password</button>
+                    </form>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='avatar-upload.js') }}" defer></script>
+    <script>
+    document.querySelectorAll('[data-theme-choice]').forEach(function (input) {
+        input.addEventListener('change', function (event) {
+            var theme = event.target.value;
+            if (theme === 'light' || theme === 'dark') {
+                document.body.dataset.theme = theme;
+            }
+        });
+    });
+    </script>
+{% endblock %}

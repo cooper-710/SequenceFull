@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sequence - Scouting Report Generator{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='dropdown-enhancer.js') }}" defer></script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body data-theme="{{ app_theme|default('dark') }}">
+    {% set user_authenticated = session.get('user_id') %}
+    <div class="app-container{% if not user_authenticated %} app-container--unauth{% endif %}">
+        {% if user_authenticated %}
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <button class="sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
+                        <i class="fas fa-chevron-left" id="sidebarToggleIcon"></i>
+                    </button>
+                    <div class="logo-container">
+                        <img src="{{ url_for('static', filename='sequence-logo.png') }}" alt="Sequence Logo" class="logo">
+                    </div>
+                    <h2 class="sidebar-title">Sequence BioLab</h2>
+                    <p class="sidebar-greeting">
+                        Hello {{ (session.get('first_name', '') ~ ' ' ~ session.get('last_name', ''))|trim }}
+                    </p>
+                </div>
+                
+                <nav class="sidebar-nav">
+                    {% if session.get('is_admin') %}
+                    <a href="{{ url_for('home') }}" class="nav-item {% if request.endpoint == 'home' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-house-chimney"></i></span>
+                        <span class="nav-text">Home</span>
+                    </a>
+                    <a href="{{ url_for('admin_dashboard') }}" class="nav-item {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-shield-halved"></i></span>
+                        <span class="nav-text">Admin</span>
+                    </a>
+                    <div class="nav-divider"></div>
+                    <a href="{{ url_for('gameday') }}" class="nav-item {% if request.endpoint == 'gameday' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-trophy"></i></span>
+                        <span class="nav-text">Gameday</span>
+                    </a>
+                    <a href="{{ url_for('schedule') }}" class="nav-item {% if request.endpoint == 'schedule' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-calendar-days"></i></span>
+                        <span class="nav-text">Schedule</span>
+                    </a>
+                    <a href="{{ url_for('scouting_report') }}" class="nav-item {% if request.endpoint == 'scouting_report' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-clipboard-user"></i></span>
+                        <span class="nav-text">Scouting Reports</span>
+                    </a>
+                    <a href="{{ url_for('pitchers_report') }}" class="nav-item {% if request.endpoint == 'pitchers_report' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-baseball"></i></span>
+                        <span class="nav-text">Pitcher's Reports</span>
+                    </a>
+                    <a href="{{ url_for('player_database') }}" class="nav-item {% if request.endpoint == 'player_database' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-magnifying-glass"></i></span>
+                        <span class="nav-text">Player Database</span>
+                    </a>
+                    <a href="{{ url_for('visuals') }}" class="nav-item {% if request.endpoint == 'visuals' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
+                        <span class="nav-text">Visuals</span>
+                    </a>
+                    <a href="{{ url_for('pitchviz') }}" class="nav-item {% if request.endpoint == 'pitchviz' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-wave-square"></i></span>
+                        <span class="nav-text">PitchViz</span>
+                    </a>
+                    <a href="{{ url_for('mocap') }}" class="nav-item {% if request.endpoint == 'mocap' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-person-running"></i></span>
+                        <span class="nav-text">Mocap</span>
+                    </a>
+                    <a href="{{ url_for('workouts') }}" class="nav-item {% if request.endpoint == 'workouts' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-dumbbell"></i></span>
+                        <span class="nav-text">Workouts</span>
+                    </a>
+                    <a href="{{ url_for('journaling') }}" class="nav-item {% if request.endpoint == 'journaling' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-pen-to-square"></i></span>
+                        <span class="nav-text">Journaling</span>
+                    </a>
+                    <a href="{{ url_for('contractviz') }}" class="nav-item {% if request.endpoint == 'contractviz' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-file-contract"></i></span>
+                        <span class="nav-text">ContractViz</span>
+                    </a>
+                    <div class="nav-divider"></div>
+                    <a href="{{ url_for('profile_settings') }}" class="nav-item {% if request.endpoint == 'profile_settings' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-user-gear"></i></span>
+                        <span class="nav-text">Profile Settings</span>
+                    </a>
+                    <a href="{{ url_for('settings') }}" class="nav-item {% if request.endpoint == 'settings' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-sliders"></i></span>
+                        <span class="nav-text">Settings</span>
+                    </a>
+                    <div class="nav-divider"></div>
+                    {% else %}
+                    <a href="{{ url_for('home') }}" class="nav-item {% if request.endpoint == 'home' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-house-chimney"></i></span>
+                        <span class="nav-text">Home</span>
+                    </a>
+                    <a href="{{ url_for('gameday') }}" class="nav-item {% if request.endpoint == 'gameday' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-trophy"></i></span>
+                        <span class="nav-text">Gameday</span>
+                    </a>
+                    <a href="{{ url_for('schedule') }}" class="nav-item {% if request.endpoint == 'schedule' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-calendar-days"></i></span>
+                        <span class="nav-text">Schedule</span>
+                    </a>
+                    <a href="{{ url_for('player_database') }}" class="nav-item {% if request.endpoint == 'player_database' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-magnifying-glass"></i></span>
+                        <span class="nav-text">Player Database</span>
+                    </a>
+                    <a href="{{ url_for('visuals') }}" class="nav-item {% if request.endpoint == 'visuals' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-chart-line"></i></span>
+                        <span class="nav-text">Visuals</span>
+                    </a>
+                    <a href="{{ url_for('mocap') }}" class="nav-item {% if request.endpoint == 'mocap' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-person-running"></i></span>
+                        <span class="nav-text">Mocap</span>
+                    </a>
+                    <a href="{{ url_for('pitchviz') }}" class="nav-item {% if request.endpoint == 'pitchviz' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-wave-square"></i></span>
+                        <span class="nav-text">PitchViz</span>
+                    </a>
+                    <a href="{{ url_for('workouts') }}" class="nav-item {% if request.endpoint == 'workouts' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-dumbbell"></i></span>
+                        <span class="nav-text">Workouts</span>
+                    </a>
+                    <a href="{{ url_for('journaling') }}" class="nav-item {% if request.endpoint == 'journaling' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-pen-to-square"></i></span>
+                        <span class="nav-text">Journaling</span>
+                    </a>
+                    <div class="nav-divider"></div>
+                    <a href="{{ url_for('profile_settings') }}" class="nav-item {% if request.endpoint == 'profile_settings' %}active{% endif %}">
+                        <span class="nav-icon"><i class="fas fa-user-gear"></i></span>
+                        <span class="nav-text">Profile Settings</span>
+                    </a>
+                    {% endif %}
+                    <div class="nav-user-block">
+                        <div class="nav-item nav-item-static">
+                            <span class="nav-icon"><i class="fas fa-user-circle"></i></span>
+                            <span class="nav-text nav-user-name">
+                                {{ session.get('first_name', '') }} {{ session.get('last_name', '') }}
+                            </span>
+                        </div>
+                        <form method="post" action="{{ url_for('logout') }}" class="nav-item nav-logout-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <button type="submit">
+                                <span class="nav-icon"><i class="fas fa-right-from-bracket"></i></span>
+                                <span class="nav-text">Logout</span>
+                            </button>
+                        </form>
+                    </div>
+                </nav>
+                
+                <div class="sidebar-footer">
+                    <p class="version-text">v1.0</p>
+                </div>
+            </aside>
+        {% endif %}
+        
+        <!-- Main Content -->
+        <main class="{% if user_authenticated %}main-content{% else %}unauthenticated-shell{% endif %}">
+            {% with messages = get_flashed_messages(with_categories=True) %}
+                {% if messages %}
+                <div class="flash-container">
+                    {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}">
+                        <span class="flash-icon">
+                            {% if category == 'success' %}
+                                <i class="fas fa-circle-check"></i>
+                            {% elif category == 'error' %}
+                                <i class="fas fa-circle-exclamation"></i>
+                            {% elif category == 'warning' %}
+                                <i class="fas fa-triangle-exclamation"></i>
+                            {% else %}
+                                <i class="fas fa-circle-info"></i>
+                            {% endif %}
+                        </span>
+                        <span class="flash-text">{{ message }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% endwith %}
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+    
+    {% block scripts %}{% endblock %}
+    <script>
+        // Sidebar toggle functionality
+        (function() {
+            const sidebar = document.getElementById('sidebar');
+            const sidebarToggle = document.getElementById('sidebarToggle');
+            const toggleIcon = document.getElementById('sidebarToggleIcon');
+            const mainContent = document.querySelector('.main-content');
+            
+            if (!sidebar || !sidebarToggle || !toggleIcon || !mainContent) {
+                return;
+            }
+            
+            // Check localStorage for saved state
+            const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+            
+            // Update icon based on state
+            function updateIcon(collapsed) {
+                if (toggleIcon) {
+                    if (collapsed) {
+                        toggleIcon.classList.remove('fa-chevron-left');
+                        toggleIcon.classList.add('fa-chevron-right');
+                    } else {
+                        toggleIcon.classList.remove('fa-chevron-right');
+                        toggleIcon.classList.add('fa-chevron-left');
+                    }
+                }
+            }
+            
+            // Initialize sidebar state
+            if (isCollapsed) {
+                sidebar.classList.add('collapsed');
+                if (mainContent) {
+                    mainContent.classList.add('sidebar-collapsed');
+                }
+                updateIcon(true);
+            }
+            
+            // Toggle sidebar
+            if (sidebarToggle) {
+                sidebarToggle.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    sidebar.classList.toggle('collapsed');
+                    if (mainContent) {
+                        mainContent.classList.toggle('sidebar-collapsed');
+                    }
+                    
+                    // Save state to localStorage
+                    const nowCollapsed = sidebar.classList.contains('collapsed');
+                    localStorage.setItem('sidebarCollapsed', nowCollapsed.toString());
+                    updateIcon(nowCollapsed);
+                });
+            }
+        })();
+
+        // Auto-dismiss flash messages after 5 seconds
+        (function() {
+            const flashMessages = document.querySelectorAll('.flash-message');
+            if (!flashMessages.length) {
+                return;
+            }
+            setTimeout(() => {
+        flashMessages.forEach(msg => {
+            msg.classList.add('flash-hidden');
+            setTimeout(() => msg.remove(), 300);
+        });
+            }, 5000);
+        })();
+    </script>
+</body>
+</html>

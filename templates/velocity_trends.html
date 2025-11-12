@@ -1,0 +1,1462 @@
+{% extends "base.html" %}
+{% from 'partials/idle_placeholder.html' import idle_placeholder %}
+{% block title %}Velocity Trends - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Velocity Trends</h1>
+                <p class="page-subtitle">Time-series analysis of pitch velocity and exit velocity trends with fatigue indicators</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="velocity-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Player Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="playerSearch" 
+                        class="control-input" 
+                        placeholder="Type to search players..."
+                        autocomplete="off"
+                    >
+                    <div id="playerSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedPlayerDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedPlayerName"></span>
+                    <button id="clearPlayer" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Player Type</label>
+                <select id="playerType" class="control-input">
+                    <option value="pitcher">Pitcher (Pitch Velocity)</option>
+                    <option value="batter">Batter (Exit Velocity)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">View Type</label>
+                <select id="viewType" class="control-input">
+                    <option value="career">Career Trends</option>
+                    <option value="season">Season Trends</option>
+                    <option value="game">Game-Level (Fatigue)</option>
+                </select>
+            </div>
+
+            <div class="control-group" id="seasonGroup" style="display: none;">
+                <label class="control-label">Season</label>
+                <input type="number" id="season" class="control-input" placeholder="e.g. 2024" min="2008" max="2025" value="2024">
+            </div>
+
+            <div class="control-group" id="gameDateGroup" style="display: none;">
+                <label class="control-label">Game Date</label>
+                <select id="gameDate" class="control-input">
+                    <option value="">Select a game...</option>
+                </select>
+            </div>
+
+            <div class="control-group" id="pitchTypeGroup" style="display: none;">
+                <label class="control-label">Pitch Type</label>
+                <select id="pitchType" class="control-input">
+                    <option value="">All Pitches</option>
+                    <option value="FF">Four-Seam Fastball</option>
+                    <option value="SI">Sinker</option>
+                    <option value="FT">Two-Seam Fastball</option>
+                    <option value="SL">Slider</option>
+                    <option value="CU">Curveball</option>
+                    <option value="CH">Changeup</option>
+                    <option value="FC">Cutter</option>
+                    <option value="KC">Knuckle Curve</option>
+                    <option value="ST">Sweeper</option>
+                </select>
+            </div>
+
+            <button id="generateVelocity" class="generate-btn disabled" type="button">
+                <i class="fas fa-tachometer-alt"></i> Generate Trends
+            </button>
+        </div>
+
+        <!-- Visualization Container -->
+        <div class="velocity-container">
+            <div class="velocity-wrapper">
+                <div class="velocity-header">
+                    <h2 id="velocityPlayerName">Select a player to begin</h2>
+                </div>
+
+                <div class="velocity-charts-container" id="velocityChartsContainer">
+                <div class="velocity-placeholder heatmap-wrapper">
+                    {{ idle_placeholder('velocityPlaceholder') }}
+                </div>
+                </div>
+
+                <div id="velocityInfo" class="velocity-info">
+                    <p>Select a player, choose view type, and click "Generate Trends" to visualize velocity patterns.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let selectedPlayer = null;
+let velocityCharts = {};
+let velocityPlaceholderHTML = '';
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    setupPlayerSearch();
+    setupViewTypeToggle();
+    
+    const chartsContainer = document.getElementById('velocityChartsContainer');
+    if (chartsContainer) {
+        velocityPlaceholderHTML = chartsContainer.innerHTML;
+    }
+    
+    const generateBtn = document.getElementById('generateVelocity');
+    if (generateBtn) {
+        generateBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!selectedPlayer) {
+                alert('Please select a player first');
+                return;
+            }
+            generateVelocityTrends();
+        });
+    }
+
+    document.getElementById('clearPlayer').addEventListener('click', function() {
+        clearPlayerSelection();
+    });
+    
+    // Add listener for season changes to reload game dates if in game view
+    const seasonInput = document.getElementById('season');
+    if (seasonInput) {
+        seasonInput.addEventListener('change', function() {
+            const viewType = document.getElementById('viewType').value;
+            if (viewType === 'game' && selectedPlayer) {
+                loadAvailableGameDates();
+            }
+        });
+    }
+});
+
+function setupViewTypeToggle() {
+    const viewType = document.getElementById('viewType');
+    const seasonGroup = document.getElementById('seasonGroup');
+    const gameDateGroup = document.getElementById('gameDateGroup');
+    const pitchTypeGroup = document.getElementById('pitchTypeGroup');
+    const playerType = document.getElementById('playerType');
+    
+    function updateControls() {
+        const view = viewType.value;
+        const type = playerType.value;
+        
+        // Show season input for season and game views
+        seasonGroup.style.display = (view === 'season' || view === 'game') ? 'flex' : 'none';
+        
+        // Show game date selector for game-level views
+        gameDateGroup.style.display = (view === 'game') ? 'flex' : 'none';
+        
+        // Show pitch type only for pitchers
+        pitchTypeGroup.style.display = (type === 'pitcher') ? 'flex' : 'none';
+        
+        // Handle game date dropdown
+        const gameDateSelect = document.getElementById('gameDate');
+        if (view === 'game') {
+            // If switching to game view
+            if (selectedPlayer) {
+                // Check if season is set
+                const seasonInput = document.getElementById('season');
+                if (seasonInput && seasonInput.value) {
+                    loadAvailableGameDates();
+                } else {
+                    // No season selected yet
+                    gameDateSelect.innerHTML = '<option value="">Select a season first</option>';
+                    gameDateSelect.disabled = true;
+                }
+            } else {
+                // No player selected
+                gameDateSelect.innerHTML = '<option value="">Select a player first</option>';
+                gameDateSelect.disabled = true;
+            }
+        } else {
+            // Clear the dropdown when switching away from game view
+            gameDateSelect.innerHTML = '<option value="">Select a game...</option>';
+            gameDateSelect.disabled = false;
+        }
+        
+    }
+    
+    viewType.addEventListener('change', updateControls);
+    playerType.addEventListener('change', updateControls);
+    updateControls();
+}
+
+async function loadAvailableGameDates() {
+    if (!selectedPlayer) return;
+    
+    const gameDateSelect = document.getElementById('gameDate');
+    const playerType = document.getElementById('playerType').value;
+    const seasonInput = document.getElementById('season');
+    const season = seasonInput.value || new Date().getFullYear();
+    
+    // If no season selected, clear the dropdown and return
+    if (!seasonInput.value) {
+        gameDateSelect.innerHTML = '<option value="">Select a season first</option>';
+        gameDateSelect.disabled = true;
+        return;
+    }
+    
+    // Show loading state
+    gameDateSelect.innerHTML = '<option value="">Loading games...</option>';
+    gameDateSelect.disabled = true;
+    
+    try {
+        const params = new URLSearchParams({
+            player: selectedPlayer,
+            player_type: playerType,
+            view_type: 'game',
+            season: season
+        });
+        
+        const response = await fetch(`/api/visuals/velocity-trends?${params.toString()}`);
+        const data = await response.json();
+        
+        if (data.error || !data.trends || data.trends.length === 0) {
+            gameDateSelect.innerHTML = '<option value="">No games found</option>';
+            gameDateSelect.disabled = false;
+            return;
+        }
+        
+        // Extract unique game dates
+        const gameDates = [...new Set(data.trends.map(t => t.game_date).filter(d => d && d !== 'Unknown'))].sort().reverse();
+        
+        // Populate dropdown
+        gameDateSelect.innerHTML = '<option value="">Select a game...</option>';
+        gameDates.forEach(date => {
+            const option = document.createElement('option');
+            option.value = date;
+            // Format date for display: "2025-03-15" -> "March 15, 2025"
+            const dateObj = new Date(date + 'T00:00:00');
+            const formattedDate = dateObj.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+            option.textContent = formattedDate;
+            gameDateSelect.appendChild(option);
+        });
+        
+        gameDateSelect.disabled = false;
+    } catch (error) {
+        console.error('Error loading game dates:', error);
+        gameDateSelect.innerHTML = '<option value="">Error loading games</option>';
+        gameDateSelect.disabled = false;
+    }
+}
+
+let searchTimeout = null;
+
+function setupPlayerSearch() {
+    const input = document.getElementById('playerSearch');
+    const dropdown = document.getElementById('playerSearchDropdown');
+    
+    if (!input || !dropdown) return;
+    
+    input.disabled = false;
+    input.readOnly = false;
+    input.style.pointerEvents = 'auto';
+    
+    async function searchPlayers() {
+        const searchTerm = input.value.trim();
+        
+        if (!searchTerm || searchTerm.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/csv/search?q=${encodeURIComponent(searchTerm)}`);
+            const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+            
+            const players = data.players || [];
+            
+            if (players.length === 0) {
+                dropdown.innerHTML = '<div class="player-dropdown-item" style="color: var(--color-text-muted);">No players found</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            dropdown.innerHTML = players.slice(0, 10).map(player => 
+                `<div class="player-dropdown-item" data-player="${player.name.replace(/"/g, '&quot;')}">${player.name}</div>`
+            ).join('');
+            dropdown.style.display = 'block';
+            
+            dropdown.querySelectorAll('.player-dropdown-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const playerName = this.getAttribute('data-player');
+                    if (playerName && !playerName.includes('No players found')) {
+                        selectPlayer(playerName);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Search error:', error);
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    input.addEventListener('input', function(e) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(searchPlayers, 300);
+    });
+    
+    input.addEventListener('focus', function() {
+        if (this.value.trim().length >= 2) {
+            searchPlayers();
+        }
+    });
+    
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(searchTimeout);
+            const firstMatch = dropdown.querySelector('.player-dropdown-item[data-player]');
+            if (firstMatch && !firstMatch.textContent.includes('No players found')) {
+                firstMatch.click();
+            } else if (this.value.trim().length >= 2) {
+                selectPlayer(this.value.trim());
+            }
+        }
+    });
+    
+    document.addEventListener('click', function(e) {
+        if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+async function selectPlayer(playerName) {
+    selectedPlayer = playerName;
+    document.getElementById('selectedPlayerName').textContent = playerName;
+    document.getElementById('selectedPlayerDisplay').style.display = 'flex';
+    
+    const searchInput = document.getElementById('playerSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('playerSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    
+    // If game view is selected, check if we can load available dates
+    const viewType = document.getElementById('viewType').value;
+    if (viewType === 'game') {
+        const seasonInput = document.getElementById('season');
+        const gameDateSelect = document.getElementById('gameDate');
+        if (seasonInput && seasonInput.value) {
+            loadAvailableGameDates();
+        } else {
+            gameDateSelect.innerHTML = '<option value="">Select a season first</option>';
+            gameDateSelect.disabled = true;
+        }
+    }
+    document.getElementById('velocityPlayerName').textContent = playerName;
+    
+    const generateBtn = document.getElementById('generateVelocity');
+    if (generateBtn) {
+        generateBtn.classList.remove('disabled');
+    }
+}
+
+function clearPlayerSelection() {
+    selectedPlayer = null;
+    document.getElementById('selectedPlayerDisplay').style.display = 'none';
+    document.getElementById('playerSearch').value = '';
+    document.getElementById('velocityPlayerName').textContent = 'Select a player to begin';
+    
+    const generateBtn = document.getElementById('generateVelocity');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+    }
+    
+    clearVelocityCharts();
+}
+
+async function generateVelocityTrends() {
+    if (!selectedPlayer) {
+        alert('Please select a player first');
+        return;
+    }
+
+    const playerType = document.getElementById('playerType').value;
+    const viewType = document.getElementById('viewType').value;
+    const season = document.getElementById('season').value || null;
+    const gameDate = document.getElementById('gameDate').value || null;
+    const pitchType = document.getElementById('pitchType').value || null;
+    
+    // Require game date selection for game-level view
+    if (viewType === 'game' && !gameDate) {
+        alert('Please select a game date');
+        return;
+    }
+
+    const info = document.getElementById('velocityInfo');
+    info.innerHTML = `
+        <div class="velocity-info-message velocity-info-loading">
+            <div class="velocity-info-title">Generating Velocity Trends…</div>
+            <div class="velocity-info-text">Fetching velocity data and analyzing trends.</div>
+        </div>
+    `;
+
+    try {
+        const params = new URLSearchParams({
+            player: selectedPlayer,
+            player_type: playerType,
+            view_type: viewType
+        });
+        
+        if (season) {
+            params.append('season', season);
+        }
+        if (gameDate) {
+            params.append('game_date', gameDate);
+        }
+        if (pitchType) {
+            params.append('pitch_type', pitchType);
+        }
+        
+        const url = `/api/visuals/velocity-trends?${params.toString()}`;
+        console.log('Fetching velocity trends from:', url);
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP ${response.status}: Failed to fetch velocity data`);
+        }
+        
+        const data = await response.json();
+        console.log('API Response:', data);
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        if (!data.trends || data.trends.length === 0) {
+            throw new Error(`No velocity data found for ${selectedPlayer}. Please try a different player or season.`);
+        }
+        
+        renderVelocityCharts(data, viewType);
+    } catch (error) {
+        console.error('Error generating velocity trends:', error);
+        const errorMessage = error.message || 'Unknown error occurred';
+        info.innerHTML = `
+            <div class="velocity-info-message velocity-info-warning">
+                <div class="velocity-info-title">Unable to generate trends</div>
+                <div class="velocity-info-text">${errorMessage}</div>
+            </div>
+        `;
+        
+        const container = document.getElementById('velocityChartsContainer');
+        const placeholder = container.querySelector('.velocity-placeholder');
+        if (placeholder) {
+            placeholder.style.display = 'flex';
+        }
+    }
+}
+
+function renderVelocityCharts(data, viewType) {
+    const container = document.getElementById('velocityChartsContainer');
+    const placeholder = container.querySelector('.velocity-placeholder');
+    if (placeholder) {
+        placeholder.style.display = 'none';
+    }
+
+    // Clear existing charts
+    Object.values(velocityCharts).forEach(chart => {
+        if (chart) chart.destroy();
+    });
+    velocityCharts = {};
+
+    container.innerHTML = '';
+
+    if (viewType === 'game') {
+        // Game-level fatigue chart
+        renderGameFatigueChart(data);
+    } else if (viewType === 'season') {
+        // Season trends chart
+        renderSeasonTrendsChart(data);
+    } else {
+        // Career trends chart
+        renderCareerTrendsChart(data);
+    }
+    
+    updateVelocityInfo(data);
+}
+
+function renderGameFatigueChart(data) {
+    const container = document.getElementById('velocityChartsContainer');
+    
+    const chartContainer = document.createElement('div');
+    chartContainer.className = 'chart-card chart-card-full';
+    chartContainer.innerHTML = `
+        <div class="chart-header">
+            <h3>Velocity by Pitch Number</h3>
+            <div class="chart-stats" id="fatigue-stats"></div>
+        </div>
+        <canvas id="fatigue-chart"></canvas>
+    `;
+    container.appendChild(chartContainer);
+
+    const canvas = document.getElementById('fatigue-chart');
+    const ctx = canvas.getContext('2d');
+
+    const trends = data.trends || [];
+    
+    // Sort by pitch number and get velocities for this specific game
+    const sortedTrends = trends
+        .filter(t => t.pitch_number !== null && t.pitch_number !== undefined && t.velocity !== null && t.velocity !== undefined)
+        .sort((a, b) => (a.pitch_number || 0) - (b.pitch_number || 0));
+    
+    const pitchNumbers = sortedTrends.map(t => t.pitch_number);
+    const velocities = sortedTrends.map(t => t.velocity);
+    
+    // Calculate fatigue stats
+    let avgEarly = null;
+    let avgLate = null;
+    let drop = null;
+    let earlyPitches = [];
+    let latePitches = [];
+    
+    if (sortedTrends.length > 0) {
+        earlyPitches = sortedTrends.filter(t => (t.pitch_number || 0) <= 30).map(t => t.velocity);
+        latePitches = sortedTrends.filter(t => (t.pitch_number || 0) > 90).map(t => t.velocity);
+        
+        avgEarly = earlyPitches.length > 0 ? earlyPitches.reduce((a, b) => a + b, 0) / earlyPitches.length : null;
+        avgLate = latePitches.length > 0 ? latePitches.reduce((a, b) => a + b, 0) / latePitches.length : null;
+        drop = avgEarly && avgLate ? (avgEarly - avgLate) : null;
+    }
+
+    // Create dataset matching the season trends style
+    const datasets = [{
+        label: 'Velocity',
+        data: velocities,
+        borderColor: 'var(--color-accent)',
+        backgroundColor: 'rgba(255, 127, 0, 0.1)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.4,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        pointBackgroundColor: 'var(--color-accent)',
+        pointBorderColor: 'var(--color-text-primary)',
+        pointBorderWidth: 2,
+        spanGaps: false
+    }];
+
+    // Calculate min/max for y-axis
+    const allVelocities = velocities.filter(v => v !== null && v !== undefined);
+    const yMin = allVelocities.length > 0 ? Math.min(...allVelocities) - 1 : 80;
+    const yMax = allVelocities.length > 0 ? Math.max(...allVelocities) + 1 : 100;
+
+    velocityCharts.fatigue = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: pitchNumbers,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(10, 10, 10, 0.95)',
+                    titleColor: 'var(--color-accent)',
+                    bodyColor: 'var(--color-text-primary)',
+                    borderColor: 'var(--color-accent)',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            return `Velocity: ${context.parsed.y ? context.parsed.y.toFixed(1) + ' mph' : 'N/A'}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Pitch Number',
+                        color: 'var(--color-text-muted)'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: 'var(--color-text-muted)',
+                        font: { size: 11 }
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Velocity (mph)',
+                        color: 'var(--color-text-muted)'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: 'var(--color-text-muted)',
+                        font: { size: 11 },
+                        callback: function(value) {
+                            return value + ' mph';
+                        }
+                    },
+                    min: yMin,
+                    max: yMax
+                }
+            }
+        }
+    });
+
+    // Display stats in the same format as season/career trends
+    const statsHtml = `
+        <div class="stat-item">
+            <span class="stat-label">Early (1-30):</span>
+            <span class="stat-value">${avgEarly ? avgEarly.toFixed(1) + ' mph' : 'N/A'}</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Late (90+):</span>
+            <span class="stat-value">${avgLate ? avgLate.toFixed(1) + ' mph' : 'N/A'}</span>
+        </div>
+        ${drop !== null ? `
+        <div class="stat-item">
+            <span class="stat-label">Drop:</span>
+            <span class="stat-value ${drop > 0 ? 'negative' : ''}">${Math.abs(drop).toFixed(1)} mph</span>
+        </div>
+        ` : ''}
+    `;
+    document.getElementById('fatigue-stats').innerHTML = statsHtml;
+}
+
+function renderSeasonTrendsChart(data) {
+    const container = document.getElementById('velocityChartsContainer');
+    
+    const chartContainer = document.createElement('div');
+    chartContainer.className = 'chart-card chart-card-full';
+    chartContainer.innerHTML = `
+        <div class="chart-header">
+            <h3>Velocity Trends by Game</h3>
+            <div class="chart-stats" id="season-stats"></div>
+        </div>
+        <canvas id="season-chart"></canvas>
+    `;
+    container.appendChild(chartContainer);
+
+    const canvas = document.getElementById('season-chart');
+    const ctx = canvas.getContext('2d');
+
+    const trends = data.trends || [];
+    
+    // Group by game date and calculate average velocity per game
+    const gameAverages = {};
+    trends.forEach(trend => {
+        const gameDate = trend.game_date || 'Unknown';
+        if (!gameAverages[gameDate]) {
+            gameAverages[gameDate] = { velocities: [], dates: [] };
+        }
+        if (trend.velocity !== null && trend.velocity !== undefined) {
+            gameAverages[gameDate].velocities.push(trend.velocity);
+            gameAverages[gameDate].dates.push(gameDate);
+        }
+    });
+
+    const gameDates = Object.keys(gameAverages).sort();
+    const avgVelocities = gameDates.map(date => {
+        const game = gameAverages[date];
+        return game.velocities.length > 0 
+            ? game.velocities.reduce((a, b) => a + b, 0) / game.velocities.length 
+            : null;
+    });
+
+    velocityCharts.season = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: gameDates,
+            datasets: [{
+                label: 'Average Velocity',
+                data: avgVelocities,
+                borderColor: 'var(--color-accent)',
+                backgroundColor: 'rgba(255, 127, 0, 0.1)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 4,
+                pointHoverRadius: 6,
+                pointBackgroundColor: 'var(--color-accent)',
+                pointBorderColor: 'var(--color-text-primary)',
+                pointBorderWidth: 2,
+                spanGaps: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(10, 10, 10, 0.95)',
+                    titleColor: 'var(--color-accent)',
+                    bodyColor: 'var(--color-text-primary)',
+                    borderColor: 'var(--color-accent)',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            return `Velocity: ${context.parsed.y ? context.parsed.y.toFixed(1) + ' mph' : 'N/A'}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Game Date',
+                        color: 'var(--color-text-muted)'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: 'var(--color-text-muted)',
+                        font: { size: 11 },
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Velocity (mph)',
+                        color: 'var(--color-text-muted)'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: 'var(--color-text-muted)',
+                        font: { size: 11 },
+                        callback: function(value) {
+                            return value + ' mph';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Calculate season stats
+    const validVelocities = avgVelocities.filter(v => v !== null && v !== undefined);
+    if (validVelocities.length > 0) {
+        const avg = validVelocities.reduce((a, b) => a + b, 0) / validVelocities.length;
+        const max = Math.max(...validVelocities);
+        const min = Math.min(...validVelocities);
+
+        document.getElementById('season-stats').innerHTML = `
+            <div class="stat-item">
+                <span class="stat-label">Avg:</span>
+                <span class="stat-value">${avg.toFixed(1)} mph</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Max:</span>
+                <span class="stat-value">${max.toFixed(1)} mph</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Min:</span>
+                <span class="stat-value">${min.toFixed(1)} mph</span>
+            </div>
+        `;
+    }
+}
+
+function renderCareerTrendsChart(data) {
+    const container = document.getElementById('velocityChartsContainer');
+    
+    const chartContainer = document.createElement('div');
+    chartContainer.className = 'chart-card chart-card-full';
+    chartContainer.innerHTML = `
+        <div class="chart-header">
+            <h3>Career Velocity Trends</h3>
+            <div class="chart-stats" id="career-stats"></div>
+        </div>
+        <canvas id="career-chart"></canvas>
+    `;
+    container.appendChild(chartContainer);
+
+    const canvas = document.getElementById('career-chart');
+    const ctx = canvas.getContext('2d');
+
+    const trends = data.trends || [];
+    
+    // Group by season and calculate average velocity per season
+    const seasonAverages = {};
+    trends.forEach(trend => {
+        const season = trend.season || trend.game_year || 'Unknown';
+        if (!seasonAverages[season]) {
+            seasonAverages[season] = [];
+        }
+        if (trend.velocity !== null && trend.velocity !== undefined) {
+            seasonAverages[season].push(trend.velocity);
+        }
+    });
+
+    const seasons = Object.keys(seasonAverages).sort();
+    const avgVelocities = seasons.map(season => {
+        const velocities = seasonAverages[season];
+        return velocities.length > 0 
+            ? velocities.reduce((a, b) => a + b, 0) / velocities.length 
+            : null;
+    });
+
+    velocityCharts.career = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: seasons,
+            datasets: [{
+                label: 'Average Velocity',
+                data: avgVelocities,
+                borderColor: 'var(--color-accent)',
+                backgroundColor: 'rgba(255, 127, 0, 0.1)',
+                borderWidth: 3,
+                fill: true,
+                tension: 0.4,
+                pointRadius: 6,
+                pointHoverRadius: 8,
+                pointBackgroundColor: 'var(--color-accent)',
+                pointBorderColor: 'var(--color-text-primary)',
+                pointBorderWidth: 2,
+                spanGaps: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(10, 10, 10, 0.95)',
+                    titleColor: 'var(--color-accent)',
+                    bodyColor: 'var(--color-text-primary)',
+                    borderColor: 'var(--color-accent)',
+                    borderWidth: 1,
+                    padding: 12,
+                    callbacks: {
+                        label: function(context) {
+                            return `Velocity: ${context.parsed.y ? context.parsed.y.toFixed(1) + ' mph' : 'N/A'}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Season',
+                        color: 'var(--color-text-muted)'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: 'var(--color-text-muted)',
+                        font: { size: 11 }
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Velocity (mph)',
+                        color: 'var(--color-text-muted)'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: 'var(--color-text-muted)',
+                        font: { size: 11 },
+                        callback: function(value) {
+                            return value + ' mph';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Calculate career stats
+    const validVelocities = avgVelocities.filter(v => v !== null && v !== undefined);
+    if (validVelocities.length > 0) {
+        const avg = validVelocities.reduce((a, b) => a + b, 0) / validVelocities.length;
+        const max = Math.max(...validVelocities);
+        const min = Math.min(...validVelocities);
+        const latest = validVelocities[validVelocities.length - 1];
+        const peak = Math.max(...validVelocities);
+        const peakSeason = seasons[validVelocities.indexOf(peak)];
+
+        document.getElementById('career-stats').innerHTML = `
+            <div class="stat-item">
+                <span class="stat-label">Current:</span>
+                <span class="stat-value">${latest.toFixed(1)} mph</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Peak:</span>
+                <span class="stat-value">${peak.toFixed(1)} mph</span>
+                <span class="stat-season">(${peakSeason})</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Avg:</span>
+                <span class="stat-value">${avg.toFixed(1)} mph</span>
+            </div>
+        `;
+    }
+}
+
+function generateColors(count) {
+    const colors = [];
+    const hueStep = 360 / count;
+    for (let i = 0; i < count; i++) {
+        const hue = (i * hueStep) % 360;
+        colors.push(`hsla(${hue}, 70%, 60%, 1)`);
+    }
+    return colors;
+}
+
+function updateVelocityInfo(data) {
+    const info = document.getElementById('velocityInfo');
+    const trends = data.trends || [];
+    const totalPitches = trends.length;
+    
+    info.innerHTML = `
+        <div class="velocity-summary">
+            <div class="summary-card">
+                <div class="summary-label">Total Data Points</div>
+                <div class="summary-value">${totalPitches.toLocaleString()}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Player Type</div>
+                <div class="summary-value">${data.player_type === 'pitcher' ? 'Pitcher' : 'Batter'}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">View Type</div>
+                <div class="summary-value">${data.view_type === 'career' ? 'Career' : data.view_type === 'season' ? 'Season' : 'Game-Level'}</div>
+            </div>
+        </div>
+    `;
+}
+
+function clearVelocityCharts() {
+    Object.values(velocityCharts).forEach(chart => {
+        if (chart) chart.destroy();
+    });
+    velocityCharts = {};
+    
+    const container = document.getElementById('velocityChartsContainer');
+    if (velocityPlaceholderHTML) {
+        container.innerHTML = velocityPlaceholderHTML;
+    }
+    
+    document.getElementById('velocityInfo').innerHTML = '<p>Select a player, choose view type, and click "Generate Trends" to visualize velocity patterns.</p>';
+}
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+    font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--color-text-primary);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-page-bg) 85%, white), var(--color-page-bg));
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.back-button:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.velocity-controls {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    padding: 1.5rem;
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-floating);
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 150px;
+}
+
+.control-group-full {
+    width: 100%;
+    min-width: 100%;
+}
+
+.control-label {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.control-input {
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+}
+
+.control-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.generate-btn {
+    padding: 0.75rem 2rem;
+    background: var(--color-accent);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    color: var(--color-main-bg);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.generate-btn:hover:not(.disabled) {
+    background: var(--color-accent-bright);
+    border-color: var(--color-accent-bright);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.3);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--color-border);
+    border-color: var(--color-border);
+}
+
+.player-search-container {
+    position: relative;
+    width: 100%;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    margin-top: 2px;
+}
+
+.player-dropdown-item {
+    padding: 0.75rem 1rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background 0.2s ease;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 80%, var(--color-main-bg));
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+}
+
+.selected-player-display span {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.clear-player-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    color: var(--color-accent);
+}
+
+.velocity-container {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 18px;
+    padding: 2rem;
+    box-shadow: var(--shadow-elevated);
+    backdrop-filter: blur(10px);
+}
+
+.velocity-wrapper {
+    width: 100%;
+}
+
+.velocity-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 2px solid var(--color-layer-border);
+}
+
+.velocity-header h2 {
+    font-size: 1.75rem;
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+    font-weight: 700;
+}
+
+.velocity-charts-container {
+    margin-bottom: 2rem;
+}
+
+.chart-card {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow-floating);
+}
+
+.chart-card-full {
+    width: 100%;
+}
+
+.chart-card:hover {
+    border-color: var(--color-accent);
+    box-shadow: 0 12px 30px var(--color-accent-soft);
+    transform: translateY(-2px);
+}
+
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.chart-header h3 {
+    font-size: 1.1rem;
+    color: var(--color-text-primary);
+    font-weight: 600;
+    margin: 0;
+}
+
+.chart-stats {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.stat-label {
+    color: var(--color-text-muted);
+}
+
+.stat-value {
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+
+.stat-value.negative {
+    color: var(--color-danger);
+}
+
+.stat-season {
+    color: var(--color-text-subtle);
+    font-size: 0.75rem;
+}
+
+.chart-card canvas {
+    max-height: 500px;
+    height: 500px !important;
+}
+
+.velocity-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    padding: 3rem;
+}
+
+.placeholder-animation {
+    text-align: center;
+}
+
+.placeholder-wave {
+    width: 100%;
+    max-width: 500px;
+    margin-bottom: 2rem;
+}
+
+.wave-path {
+    animation: waveAnimation 3s ease-in-out infinite;
+}
+
+.wave-delay-1 {
+    animation-delay: 0.5s;
+}
+
+.wave-delay-2 {
+    animation-delay: 1s;
+}
+
+@keyframes waveAnimation {
+    0%, 100% {
+        opacity: 0.3;
+        transform: translateX(0);
+    }
+    50% {
+        opacity: 0.8;
+        transform: translateX(10px);
+    }
+}
+
+.placeholder-text {
+    color: var(--color-text-subtle);
+    font-size: 1.1rem;
+}
+
+.placeholder-text i {
+    font-size: 3rem;
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.velocity-info {
+    padding: 1.25rem 1.5rem;
+    background: var(--color-layer-soft);
+    border-radius: 12px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-floating);
+}
+
+.velocity-info p {
+    color: var(--color-text-muted);
+    margin: 0;
+    text-align: center;
+    font-size: 0.95rem;
+}
+
+.velocity-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.summary-card {
+    background: color-mix(in srgb, var(--color-layer-card) 92%, var(--color-page-bg));
+    border: 1px solid var(--color-layer-border);
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.summary-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.58);
+    margin-bottom: 0.5rem;
+}
+
+.summary-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--color-accent);
+}
+
+.velocity-info-message {
+    text-align: center;
+    padding: 1rem;
+}
+
+.velocity-info-title {
+    font-size: 1.1rem;
+    color: var(--color-text-primary);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.velocity-info-text {
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+}
+
+.velocity-info-loading .velocity-info-title {
+    color: var(--color-accent);
+}
+
+.velocity-info-warning .velocity-info-title {
+    color: var(--color-danger);
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+
+    .header-content {
+        flex-direction: column;
+    }
+
+    .velocity-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-group {
+        min-width: 100%;
+    }
+
+    .generate-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+{% endblock %}
+

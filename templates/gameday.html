@@ -1,0 +1,1066 @@
+{% extends "base.html" %}
+
+{% block title %}Gameday - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container gameday-page">
+    <header class="section-hero">
+        <div class="section-hero-heading">
+            <h1 class="hero-content">Gameday Hub</h1>
+        </div>
+        {% if session.get('is_admin') and admin_user_options %}
+        <form class="section-hero-actions gameday-user-picker" method="get" action="{{ url_for('gameday') }}">
+            {% set standings_view = request.args.get('standings_view') %}
+            {% set division_id = request.args.get('division_id') %}
+            {% set league_id = request.args.get('league_id') %}
+            {% if standings_view %}
+            <input type="hidden" name="standings_view" value="{{ standings_view }}">
+            {% endif %}
+            {% if division_id %}
+            <input type="hidden" name="division_id" value="{{ division_id }}">
+            {% endif %}
+            {% if league_id %}
+            <input type="hidden" name="league_id" value="{{ league_id }}">
+            {% endif %}
+            <label class="gameday-user-picker-label" for="gameday-user-select">View user</label>
+            <select id="gameday-user-select" name="user_id" class="gameday-user-picker-select" aria-label="Select user to view gameday hub" onchange="this.form.submit()">
+                {% for option in admin_user_options %}
+                <option value="{{ option.id }}" {% if option.id == selected_user_id %}selected{% endif %}>{{ option.label }}</option>
+                {% endfor %}
+            </select>
+            <noscript>
+                <button type="submit">Apply</button>
+            </noscript>
+        </form>
+        {% endif %}
+    </header>
+
+    <div class="gameday-layout">
+        <div class="gameday-main">
+            <div class="gameday-top-grid">
+                <section class="gameday-card schedule-card" data-schedule-state="current">
+                <div class="schedule-tabs" role="tablist" aria-label="Series timeframe">
+                    <button class="schedule-tab" type="button" data-filter="past" role="tab" aria-selected="false">
+                        Past Series
+                    </button>
+                    <button class="schedule-tab is-active" type="button" data-filter="current" role="tab" aria-selected="true">
+                        Current Series
+                    </button>
+                    <button class="schedule-tab" type="button" data-filter="future" role="tab" aria-selected="false">
+                        Upcoming Series
+                    </button>
+                </div>
+                <p class="empty-note schedule-empty" hidden>No series in this view yet.</p>
+                {% if upcoming_games %}
+                <ul class="matchups-list">
+                    {% for game in upcoming_games %}
+                    <li data-status="{{ game.status or '' }}" data-opponent="{{ (game.opponent_abbr or game.opponent)|lower }}">
+                        <div class="matchup-head">
+                            <span class="matchup-date">{{ game.date }}</span>
+                            {% if game.series %}
+                            <span class="matchup-series">{{ game.series }}</span>
+                            {% endif %}
+                        </div>
+                        <div class="matchup-row">
+                            <span class="matchup-opponent">
+                                <span class="matchup-badge">
+                                    {% if game.opponent_id %}
+                                    <img src="https://www.mlbstatic.com/team-logos/{{ game.opponent_id }}.svg"
+                                         alt="{{ game.opponent }} logo"
+                                         loading="lazy"
+                                         width="36"
+                                         height="36">
+                                    {% else %}
+                                    {{ game.opponent_abbr or game.opponent }}
+                                    {% endif %}
+                                </span>
+                                {% if game.home %}Home vs{% else %}Road @{% endif %} {{ game.opponent }}
+                            </span>
+                            <span class="matchup-time">{{ game.time }}</span>
+                        </div>
+                        {% if game.venue or game.status %}
+                        <div class="matchup-meta">
+                            {% if game.venue %}
+                            <span><i class="fas fa-location-dot"></i> {{ game.venue }}</span>
+                            {% endif %}
+                            {% if game.status %}
+                            <span><i class="fas fa-flag"></i> {{ game.status }}</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        {% if game.probable_pitchers %}
+                        <div class="matchup-probables">
+                            <i class="fas fa-user"></i> Probable: {{ game.probable_pitchers|join(', ') }}
+                        </div>
+                        {% endif %}
+                        <div class="matchup-reports">
+                            {% if game.reports %}
+                                {% for report in game.reports %}
+                                <a class="report-chip" href="{{ report.url }}" target="_blank" rel="noopener">
+                                    <i class="fas fa-file-pdf"></i> {{ report.title }}
+                                </a>
+                                {% endfor %}
+                            {% else %}
+                                <span class="empty-note">No report linked yet</span>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="empty-state">
+                    No games on the calendar yet. Generate reports once matchups are finalized.
+                </p>
+                {% endif %}
+                </section>
+
+                <section class="gameday-card docs-card">
+                    <div class="card-header docs-header">
+                        <h2><i class="fas fa-file"></i> Player Documents</h2>
+                        {% if player_documents %}
+                        <span class="docs-count-pill">
+                            {{ player_documents|length }} {{ 'file' if player_documents|length == 1 else 'files' }}
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% if player_documents %}
+                    <ul class="player-docs-list">
+                        {% for doc in player_documents %}
+                        <li class="player-docs-item"
+                            data-doc-status="{{ (doc.series_status or 'none')|lower }}"
+                            data-doc-opponent="{{ (doc.series_opponent or '')|lower }}">
+                            <div class="player-docs-info">
+                                <div class="player-docs-titles">
+                                    <h3>{{ doc.filename }}</h3>
+                                    <div class="player-docs-meta">
+                                        {% if doc.series_label %}
+                                        <span>
+                                            <i class="fas fa-calendar"></i>
+                                            {{ doc.series_label }}
+                                            {% if doc.series_range_display %}
+                                            · {{ doc.series_range_display }}
+                                            {% endif %}
+                                            {% if doc.series_status == 'current' %}
+                                            <span class="doc-series-pill current">Current</span>
+                                            {% elif doc.series_status == 'upcoming' %}
+                                            <span class="doc-series-pill upcoming">Upcoming</span>
+                                            {% endif %}
+                                        </span>
+                                        {% elif doc.series_status is none %}
+                                        <span><i class="fas fa-calendar"></i> No Specific Series</span>
+                                        {% endif %}
+                                        {% if doc.uploaded_at %}
+                                        <span><i class="fas fa-calendar-plus"></i> {{ doc.uploaded_at }}</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <a class="player-docs-download" href="{{ doc.download_url }}">
+                                <i class="fas fa-download"></i> Download
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    <p class="empty-state docs-empty-placeholder" hidden>No documents for this view.</p>
+                    {% else %}
+                    <p class="empty-state">
+                        No documents uploaded yet. Ask your admin to add files from the Admin dashboard.
+                    </p>
+                    {% endif %}
+                </section>
+            </div>
+
+            <section class="gameday-card">
+                <div class="card-header">
+                    <h2><i class="fas fa-chart-line"></i> League Leaders</h2>
+                </div>
+                {% if league_leader_groups %}
+                <div class="leaders-columns">
+                    {% for group in league_leader_groups %}
+                    {% set group_index = loop.index0 %}
+                    <div class="leaders-group" data-group="{{ group_index }}">
+                        <div class="leaders-group-heading">
+                            <h3>{{ group.group }}</h3>
+                            {% if group.categories|length > 1 %}
+                            <label class="leaders-select-label">
+                                <span>Stat</span>
+                                <select class="leaders-select" data-group="{{ group_index }}">
+                                    {% for category in group.categories %}
+                                    <option value="{{ loop.index0 }}">{{ category.label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                            {% else %}
+                            <div class="leaders-single-label">{{ group.categories[0].label }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="leaders-grid">
+                            {% for category in group.categories %}
+                            <div class="leaders-card {% if not loop.first %}is-hidden{% endif %}" data-group="{{ group_index }}" data-category="{{ loop.index0 }}">
+                                <header>
+                                    <h4>{{ category.label }}</h4>
+                                    <span class="leaders-subtext">{{ category.subtitle or '' }}</span>
+                                </header>
+                                <table class="leaders-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Player</th>
+                                            <th>Team</th>
+                                            <th class="leaders-value-col">{{ category.abbr or 'Value' }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for entry in category.entries %}
+                                        <tr>
+                                            <td class="leader-rank">#{{ entry.rank }}</td>
+                                            <td>
+                                                <a class="leader-link" href="{{ url_for('player_database') }}?player={{ entry.player | urlencode }}">
+                                                    {{ entry.player }}
+                                                </a>
+                                            </td>
+                                            <td class="leader-team">{{ entry.team }}</td>
+                                            <td class="leader-value">{{ entry.value }}</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="empty-state">Leaderboards are currently unavailable.</p>
+                {% endif %}
+            </section>
+
+            <section id="standings" class="gameday-card standings-card">
+                <div class="card-header">
+                    <h2><i class="fas fa-trophy"></i> Standings</h2>
+                </div>
+                <div class="standings-controls">
+                    <div class="standings-tabs">
+                        <a class="standings-tab {% if standings_view == 'division' %}active{% endif %}"
+                           href="{{ url_for('gameday', standings_view='division', division_id=selected_division_id) }}">
+                            Division
+                        </a>
+                        <a class="standings-tab {% if standings_view == 'wildcard' %}active{% endif %}"
+                           href="{{ url_for('gameday', standings_view='wildcard', league_id=selected_league_id) }}">
+                            Wild Card
+                        </a>
+                    </div>
+                    {% if standings_view == 'division' %}
+                    <form method="get" class="standings-form">
+                        <input type="hidden" name="standings_view" value="division">
+                        <select name="division_id" class="standings-select" onchange="this.form.submit()">
+                            {% for option in division_options %}
+                            <option value="{{ option.id }}"
+                                    {% if option.id == selected_division_id %}selected{% endif %}>
+                                {{ option.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                    {% else %}
+                    <form method="get" class="standings-form">
+                        <input type="hidden" name="standings_view" value="wildcard">
+                        <select name="league_id" class="standings-select" onchange="this.form.submit()">
+                            {% for option in league_options %}
+                            <option value="{{ option.id }}"
+                                    {% if option.id == selected_league_id %}selected{% endif %}>
+                                {{ option.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                    {% endif %}
+                </div>
+                {% if standings_data and standings_data.rows %}
+                <h3 class="standings-division">{{ standings_data.title }}</h3>
+                <table class="standings-table">
+                    <thead>
+                        <tr>
+                            <th>Team</th>
+                            <th>W</th>
+                            <th>L</th>
+                            <th>GB</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in standings_data.rows %}
+                        <tr class="{% if row.is_user_team %}is-user-team{% endif %}">
+                            <td>{{ row.team }}</td>
+                            <td>{{ row.wins }}</td>
+                            <td>{{ row.losses }}</td>
+                            <td>{{ row.games_back }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p class="empty-state">Standings are currently unavailable.</p>
+                {% endif %}
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.gameday-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+.gameday-layout {
+    display: block;
+}
+.gameday-main {
+    display: grid;
+    gap: 28px;
+}
+.gameday-top-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 28px;
+    align-items: stretch;
+}
+.gameday-card {
+    border-radius: 20px;
+    border: 1px solid var(--color-layer-border);
+    background: var(--color-layer-card);
+    padding: 24px;
+    box-shadow: var(--shadow-elevated);
+    display: grid;
+    gap: 18px;
+}
+.card-header h2 {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.card-header p {
+    margin: 4px 0 0;
+    color: var(--color-text-subtle);
+}
+.matchups-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 16px;
+}
+.matchups-list li {
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    padding: 18px;
+    background: var(--color-layer-soft);
+    display: grid;
+    gap: 12px;
+}
+.matchup-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.matchup-date {
+    font-weight: 700;
+}
+.matchup-series {
+    border-radius: 999px;
+    padding: 4px 10px;
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-layer-card));
+    font-weight: 600;
+    font-size: 0.75rem;
+}
+.matchup-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+.matchup-opponent {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+.matchup-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+    color: var(--color-accent);
+    font-weight: 700;
+    overflow: hidden;
+}
+.matchup-badge img {
+    width: 70%;
+    height: 70%;
+    object-fit: contain;
+}
+.matchup-time {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+.matchup-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    color: var(--color-text-subtle);
+    font-size: 0.85rem;
+}
+.matchup-meta i {
+    margin-right: 6px;
+}
+.matchup-probables {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+}
+.matchup-reports {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+.schedule-tabs {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    background: var(--color-layer-soft);
+    padding: 6px;
+    border-radius: 999px;
+    margin-bottom: 12px;
+}
+.schedule-tab {
+    border: none;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+.schedule-tab:hover {
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: var(--color-accent);
+}
+.schedule-tab.is-active {
+    background: var(--color-accent);
+    color: var(--color-layer-card);
+}
+.report-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255, 127, 0, 0.16);
+    color: var(--color-accent);
+    font-weight: 600;
+    text-decoration: none;
+}
+.report-chip:hover {
+    background: rgba(255, 127, 0, 0.24);
+}
+.empty-note {
+    color: var(--color-text-subtle);
+    font-size: 0.85rem;
+}
+.leaders-columns {
+    display: grid;
+    gap: 20px;
+}
+.leaders-group-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.leaders-select-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--color-text-subtle);
+}
+.leaders-select {
+    border-radius: 999px;
+    border: 1px solid var(--color-layer-border);
+    padding: 6px 12px;
+    background: var(--color-layer-card);
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+.leaders-single-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+.leaders-grid {
+    position: relative;
+    min-height: 0;
+}
+.leaders-card {
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    padding: 18px;
+    background: var(--color-layer-soft);
+    display: grid;
+    gap: 16px;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.leaders-card.is-hidden {
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    transform: translateY(6px);
+}
+.leaders-card:not(.is-hidden) {
+    position: relative;
+    z-index: 1;
+    opacity: 1;
+    transform: translateY(0);
+}
+.leaders-card header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+}
+.leaders-card h4 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.leaders-card h4::before {
+    content: "";
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--color-accent);
+    box-shadow: 0 0 8px rgba(255, 127, 0, 0.45);
+}
+.leaders-subtext {
+    color: var(--color-text-subtle);
+    font-size: 0.8rem;
+}
+.leaders-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.leaders-table th,
+.leaders-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-layer-border);
+    text-align: left;
+}
+.leaders-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.leader-rank {
+    font-weight: 700;
+    color: var(--color-accent);
+}
+.leader-link {
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-weight: 600;
+}
+.leader-link:hover {
+    color: var(--color-accent);
+}
+.leader-team {
+    color: var(--color-text-subtle);
+    font-size: 0.85rem;
+}
+.leaders-value-col,
+.leader-value {
+    text-align: right;
+    font-weight: 700;
+}
+.standings-card .card-header {
+    margin-bottom: 0;
+}
+.standings-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+.standings-tabs {
+    display: inline-flex;
+    gap: 8px;
+    padding: 4px;
+    border-radius: 999px;
+    background: var(--color-layer-soft);
+}
+.standings-tab {
+    padding: 8px 18px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+.standings-tab.active {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+}
+.standings-form {
+    margin: 0;
+}
+.standings-select {
+    border-radius: 999px;
+    border: 1px solid var(--color-layer-border);
+    padding: 6px 12px;
+    background: var(--color-layer-card);
+    color: var(--color-text-primary);
+}
+.standings-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.standings-table th,
+.standings-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-layer-border);
+    text-align: left;
+}
+.standings-table .is-user-team {
+    background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+.standings-table tbody tr:hover {
+    background: color-mix(in srgb, var(--color-accent) 6%, var(--color-layer-card));
+}
+.docs-card {
+    gap: 16px;
+    align-content: start;
+}
+.docs-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+.docs-count-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+    color: var(--color-accent);
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+.player-docs-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 14px;
+}
+.player-docs-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    padding: 16px 18px;
+    background: var(--color-layer-soft);
+    box-shadow: var(--shadow-resting);
+}
+.player-docs-info {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.player-docs-titles h3 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    overflow-wrap: anywhere;
+}
+.player-docs-meta {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    color: var(--color-text-subtle);
+    font-size: 0.85rem;
+}
+.doc-series-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 6px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+    color: var(--color-accent);
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+.doc-series-pill.upcoming {
+    background: color-mix(in srgb, var(--color-highlight) 18%, transparent);
+    color: var(--color-highlight);
+}
+.doc-series-pill.current {
+    background: color-mix(in srgb, #22c55e 24%, transparent);
+    color: #15803d;
+}
+.player-docs-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+    color: var(--color-accent);
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.2s ease, transform 0.2s ease;
+    white-space: nowrap;
+}
+.player-docs-download:hover {
+    background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+    transform: translateY(-1px);
+}
+.player-doc-log {
+    margin-top: 20px;
+}
+.player-doc-log h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+.player-doc-log-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--color-layer-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+}
+.player-doc-log-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-layer-border);
+}
+.player-doc-log-list li:last-child {
+    border-bottom: none;
+}
+.player-doc-log-action {
+    font-weight: 600;
+}
+.player-doc-log-meta {
+    color: var(--color-text-subtle);
+    font-size: 0.85rem;
+}
+@media (max-width: 1100px) {
+    .gameday-top-grid {
+        grid-template-columns: 1fr;
+    }
+    .docs-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .player-docs-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .player-docs-download {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var leaderSelects = document.querySelectorAll('.leaders-select');
+    var standingForms = document.querySelectorAll('.standings-form');
+    var standingsSelects = document.querySelectorAll('.standings-select');
+    var standingsTabs = document.querySelectorAll('.standings-tab');
+    var scheduleCard = document.querySelector('.schedule-card');
+    var docsList = document.querySelector('.player-docs-list');
+    var docsCountPill = document.querySelector('.docs-count-pill');
+    var docsEmptyPlaceholder = document.querySelector('.docs-empty-placeholder');
+    var currentScheduleBucket = 'current';
+    var currentScheduleOpponent = '';
+
+    function filterPlayerDocs(bucket, opponent) {
+        if (!docsList) {
+            return;
+        }
+        var items = docsList.querySelectorAll('.player-docs-item');
+        if (!items.length) {
+            if (docsCountPill) {
+                docsCountPill.textContent = '0 files';
+            }
+            if (docsEmptyPlaceholder) {
+                docsEmptyPlaceholder.hidden = false;
+            }
+            return;
+        }
+        var targetBucket = bucket || '';
+        var opponentKey = (opponent || '').toLowerCase();
+        var visible = 0;
+        items.forEach(function (item) {
+            var status = (item.dataset.docStatus || 'none').toLowerCase();
+            var docOpp = (item.dataset.docOpponent || '').toLowerCase();
+            var shouldShow = false;
+            if (status === 'none') {
+                shouldShow = true;
+            } else if (targetBucket === 'current') {
+                shouldShow = status === 'current' && (!opponentKey || docOpp === opponentKey);
+            } else if (targetBucket === 'future') {
+                shouldShow = status === 'upcoming' && (!opponentKey || docOpp === opponentKey);
+            } else if (targetBucket === 'past') {
+                shouldShow = status === 'expired' && (!opponentKey || docOpp === opponentKey);
+            }
+            item.hidden = !shouldShow;
+            item.style.display = shouldShow ? '' : 'none';
+            if (shouldShow) {
+                visible += 1;
+            }
+        });
+        if (docsCountPill) {
+            docsCountPill.textContent = visible + ' ' + (visible === 1 ? 'file' : 'files');
+        }
+        if (docsEmptyPlaceholder) {
+            docsEmptyPlaceholder.hidden = visible > 0;
+        }
+    }
+
+    if (scheduleCard) {
+        var scheduleTabs = scheduleCard.querySelectorAll('.schedule-tab');
+        var scheduleList = scheduleCard.querySelector('.matchups-list');
+        var scheduleEmpty = scheduleCard.querySelector('.schedule-empty');
+
+        if (scheduleList) {
+            var scheduleItems = scheduleList.querySelectorAll('li');
+            var scheduleBucketPrimaryOpp = {};
+            var scheduleBucketLabels = {
+                past: 'past series',
+                current: 'current series',
+                future: 'upcoming series'
+            };
+
+            var categorize = function (item) {
+                var status = (item.dataset.status || '').toLowerCase();
+                if (status.includes('final') || status.includes('game over')) {
+                    return 'past';
+                }
+                if (
+                    status.includes('in progress') ||
+                    status.includes('pre-game') ||
+                    status.includes('pregame') ||
+                    status.includes('pre game') ||
+                    status.includes('delayed')
+                ) {
+                    return 'current';
+                }
+                return 'future';
+            };
+
+            scheduleItems.forEach(function (item) {
+                item.dataset.bucket = categorize(item);
+                var bucket = item.dataset.bucket;
+                if (!scheduleBucketPrimaryOpp[bucket]) {
+                    scheduleBucketPrimaryOpp[bucket] = item.dataset.opponent || '';
+                }
+            });
+
+            var applyScheduleFilter = function (bucket) {
+                var visibleCount = 0;
+                scheduleCard.dataset.scheduleState = bucket;
+
+                scheduleTabs.forEach(function (tab) {
+                    var isActive = tab.dataset.filter === bucket;
+                    tab.classList.toggle('is-active', isActive);
+                    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+                });
+
+                var primaryOpponent = scheduleBucketPrimaryOpp[bucket] || '';
+                scheduleItems.forEach(function (item) {
+                    var inBucket = item.dataset.bucket === bucket;
+                    var matchesOpponent = !primaryOpponent || item.dataset.opponent === primaryOpponent;
+                    var shouldShow = inBucket && matchesOpponent;
+                    item.hidden = !shouldShow;
+                    item.style.display = shouldShow ? '' : 'none';
+                    if (shouldShow) {
+                        visibleCount += 1;
+                    }
+                });
+
+                if (scheduleList) {
+                    scheduleList.hidden = visibleCount === 0;
+                }
+
+                if (scheduleEmpty) {
+                    if (visibleCount > 0) {
+                        scheduleEmpty.hidden = true;
+                    } else {
+                        scheduleEmpty.hidden = false;
+                        scheduleEmpty.textContent = 'No ' + (scheduleBucketLabels[bucket] || 'series') + ' in this view yet.';
+                    }
+                }
+
+                currentScheduleBucket = bucket;
+                currentScheduleOpponent = primaryOpponent || '';
+                filterPlayerDocs(currentScheduleBucket, currentScheduleOpponent);
+            };
+
+            scheduleTabs.forEach(function (tab) {
+                tab.addEventListener('click', function () {
+                    applyScheduleFilter(tab.dataset.filter);
+                });
+            });
+
+            if (scheduleItems.length > 0) {
+                var defaultBuckets = ['current', 'future', 'past'];
+                var applied = defaultBuckets.some(function (bucket) {
+                    applyScheduleFilter(bucket);
+                    return Array.prototype.some.call(scheduleItems, function (item) {
+                        return !item.hidden;
+                    });
+                });
+                if (!applied) {
+                    applyScheduleFilter('future');
+                }
+            }
+        } else {
+            scheduleTabs.forEach(function (tab) {
+                tab.setAttribute('aria-disabled', 'true');
+            });
+            if (scheduleEmpty) {
+                scheduleEmpty.hidden = true;
+            }
+            currentScheduleBucket = 'current';
+            currentScheduleOpponent = '';
+            filterPlayerDocs(currentScheduleBucket, currentScheduleOpponent);
+        }
+    }
+
+    function syncLeaderHeights() {
+        var visibleCards = [];
+        document.querySelectorAll('.leaders-card').forEach(function (card) {
+            if (card.classList.contains('is-hidden')) {
+                card.style.minHeight = '';
+            } else {
+                card.style.minHeight = '';
+                visibleCards.push(card);
+            }
+        });
+
+        var maxHeight = 0;
+        visibleCards.forEach(function (card) {
+            maxHeight = Math.max(maxHeight, card.offsetHeight);
+        });
+
+        if (maxHeight) {
+            document.querySelectorAll('.leaders-grid').forEach(function (grid) {
+                grid.style.minHeight = maxHeight + 'px';
+            });
+        } else {
+            document.querySelectorAll('.leaders-grid').forEach(function (grid) {
+                grid.style.minHeight = '';
+            });
+        }
+    }
+
+    leaderSelects.forEach(function (select) {
+        var group = select.dataset.group;
+        select.addEventListener('change', function () {
+            var selected = select.value;
+            document.querySelectorAll('.leaders-card[data-group="' + group + '"]').forEach(function (card) {
+                card.classList.toggle('is-hidden', card.dataset.category !== selected);
+            });
+            requestAnimationFrame(syncLeaderHeights);
+        });
+    });
+
+    window.addEventListener('resize', function () {
+        requestAnimationFrame(syncLeaderHeights);
+    });
+
+    requestAnimationFrame(syncLeaderHeights);
+
+    function markScrollIntent() {
+        try {
+            sessionStorage.setItem('scrollToStandings', '1');
+        } catch (err) {
+            // storage may be unavailable; ignore
+        }
+    }
+
+    standingForms.forEach(function (form) {
+        form.addEventListener('submit', markScrollIntent);
+    });
+
+    standingsSelects.forEach(function (select) {
+        select.addEventListener('change', markScrollIntent, { passive: true });
+    });
+
+    standingsTabs.forEach(function (tab) {
+        tab.addEventListener('click', markScrollIntent, { passive: true });
+    });
+
+    var shouldScroll = false;
+    try {
+        shouldScroll = sessionStorage.getItem('scrollToStandings') === '1';
+        sessionStorage.removeItem('scrollToStandings');
+    } catch (err) {
+        shouldScroll = false;
+    }
+
+    if (shouldScroll) {
+        var standings = document.getElementById('standings');
+        if (standings) {
+            var scrollToStandings = function () {
+                standings.scrollIntoView({ behavior: 'instant', block: 'start' });
+            };
+            requestAnimationFrame(function () {
+                requestAnimationFrame(scrollToStandings);
+            });
+        }
+    }
+});
+</script>
+{% endblock %}
+

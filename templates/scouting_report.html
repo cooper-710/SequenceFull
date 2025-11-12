@@ -1,0 +1,1006 @@
+{% extends "base.html" %}
+
+{% block title %}Scouting Reports - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <header class="section-hero">
+        <div class="section-hero-heading">
+            <h1 class="hero-content">Scouting Report Generator</h1>
+        </div>
+    </header>
+
+    <div class="content-wrapper">
+        <div class="form-container">
+            <div class="form-card">
+                <div class="form-section">
+                    <div class="section-header">
+                        <div class="section-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div>
+                            <h2 class="section-title">Player Information</h2>
+                            <p class="section-description">Add one or more players to generate reports</p>
+                        </div>
+                    </div>
+                    
+                    <div id="playersContainer" class="players-container">
+                        <!-- Player rows will be dynamically added here -->
+                    </div>
+                    
+                    <button type="button" id="addPlayerBtn" class="btn-add-player">
+                        <i class="fas fa-plus-circle"></i>
+                        <span>Add Another Player</span>
+                    </button>
+                    
+                    <div class="form-hint">
+                        <i class="fas fa-info-circle"></i>
+                        <span>Team and Opponent fields are optional. Leave blank or set to "AUTO" for automatic detection.</span>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <div class="section-header">
+                        <div class="section-icon">
+                            <i class="fas fa-cog"></i>
+                        </div>
+                        <div>
+                            <h2 class="section-title">Report Settings</h2>
+                            <p class="section-description">Configure report generation options</p>
+                        </div>
+                    </div>
+
+                    <div class="settings-grid">
+                        <div class="form-group">
+                            <label for="season_start">
+                                <i class="fas fa-calendar-alt"></i>
+                                Season Start Date
+                            </label>
+                            <input 
+                                type="date" 
+                                id="season_start" 
+                                name="season_start" 
+                                value="2025-03-20"
+                                class="form-input"
+                            >
+                        </div>
+
+                        <div class="form-group checkbox-wrapper">
+                            <label class="checkbox-label">
+                                <input 
+                                    type="checkbox" 
+                                    id="use_next_series" 
+                                    name="use_next_series"
+                                    class="checkbox-input"
+                                >
+                                <span class="checkbox-custom"></span>
+                                <span class="checkbox-text">
+                                    <strong>Use Next Series</strong>
+                                    <small>Generate report for next series instead of next game</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" id="generateBtn" class="btn-generate">
+                        <i class="fas fa-magic"></i>
+                        <span class="btn-text">Generate Report</span>
+                        <i class="fas fa-arrow-right btn-arrow"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <form id="reportForm" style="display: none;"></form>
+
+        <div id="statusContainer" class="status-container" style="display: none;">
+            <div class="status-card">
+                <div class="status-header">
+                    <h3>Generation Status</h3>
+                    <button id="closeStatus" class="btn-close">×</button>
+                </div>
+                <div id="statusContent" class="status-content">
+                    <div class="loading-container">
+                        <div class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <div id="statusMessage" class="status-message-simple">Preparing...</div>
+                    </div>
+                </div>
+                <div id="downloadSection" class="download-section" style="display: none;">
+                    <div id="singleDownload" style="display: none;">
+                        <a id="downloadLink" href="#" class="btn btn-success"><i class="fas fa-download"></i> Download Report</a>
+                    </div>
+                    <div id="batchDownloads" style="display: none;">
+                        <div class="section-header">
+                            <span class="section-icon"><i class="fas fa-check-circle"></i></span>
+                            <h4>Generated Reports</h4>
+                            <span id="reportCount" class="report-count"></span>
+                        </div>
+                        <div id="batchDownloadsList" class="reports-list"></div>
+                    </div>
+                    <div id="batchErrors" style="display: none; margin-top: 16px;">
+                        <div class="section-header error-header">
+                            <span class="section-icon"><i class="fas fa-exclamation-triangle"></i></span>
+                            <h4>Errors</h4>
+                            <span id="errorCount" class="report-count error-text"></span>
+                        </div>
+                        <div id="batchErrorsList" class="errors-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="errorContainer" class="error-container" style="display: none;">
+            <div class="error-message">
+                <strong>Error:</strong> <span id="errorText"></span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentJobId = null;
+    let statusInterval = null;
+    let playerRowCount = 0;
+    let appSettings = null;
+
+    async function loadAppSettings() {
+        try {
+            const response = await fetch('/api/settings');
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            appSettings = await response.json();
+            applyReportDefaults(appSettings);
+        } catch (error) {
+            console.error('Failed to load settings:', error);
+        }
+    }
+
+    function getReportSettings() {
+        return appSettings && appSettings.reports ? appSettings.reports : {};
+    }
+
+    function getDefaultTeam() {
+        const reports = getReportSettings();
+        return reports.default_team || 'AUTO';
+    }
+
+    function getDefaultOpponent() {
+        const reports = getReportSettings();
+        const opponent = reports.default_opponent;
+        return opponent ? opponent : null;
+    }
+
+    function applyReportDefaults(settings) {
+        const reports = settings && settings.reports ? settings.reports : {};
+        const seasonInput = document.getElementById('season_start');
+        if (seasonInput && reports.default_season_start) {
+            seasonInput.value = reports.default_season_start;
+        }
+
+        const nextSeriesCheckbox = document.getElementById('use_next_series');
+        if (nextSeriesCheckbox) {
+            nextSeriesCheckbox.checked = !!reports.use_next_series;
+        }
+
+        applyDefaultPlaceholders();
+    }
+
+    function applyDefaultPlaceholders(scope) {
+        const container = scope || document;
+        const defaultTeam = getDefaultTeam();
+        const defaultOpponent = getDefaultOpponent();
+
+        container.querySelectorAll('input[id$="-team"]').forEach(input => {
+            if (!input) return;
+            if (defaultTeam && defaultTeam.toUpperCase() !== 'AUTO') {
+                input.placeholder = `${defaultTeam} (default)`;
+            } else {
+                input.placeholder = 'AUTO (auto-detect)';
+            }
+        });
+
+        container.querySelectorAll('input[id$="-opponent"]').forEach(input => {
+            if (!input) return;
+            if (defaultOpponent) {
+                input.placeholder = `${defaultOpponent} (default)`;
+            } else {
+                input.placeholder = 'e.g., NYY, LAD';
+            }
+        });
+    }
+
+    // Create a player row
+    function createPlayerRow() {
+        playerRowCount++;
+        const rowId = `player-${playerRowCount}`;
+        const container = document.getElementById('playersContainer');
+        
+        const row = document.createElement('div');
+        row.className = 'player-row';
+        row.id = rowId;
+        
+        const hideStyle = playerRowCount === 1 ? 'style="display: none;"' : '';
+        row.innerHTML = `
+            <div class="player-row-content">
+                <div class="form-group">
+                    <label for="${rowId}-name">
+                        <i class="fas fa-user"></i>
+                        Player Name *
+                    </label>
+                    <input 
+                        type="text" 
+                        id="${rowId}-name" 
+                        placeholder="e.g., Pete Alonso, Aaron Judge"
+                        required
+                        autocomplete="off"
+                        class="form-input"
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="${rowId}-team">
+                        <i class="fas fa-shield-alt"></i>
+                        Team
+                    </label>
+                    <input 
+                        type="text" 
+                        id="${rowId}-team" 
+                        placeholder="AUTO (auto-detect)"
+                        autocomplete="off"
+                        class="form-input"
+                    >
+                </div>
+                <div class="form-group">
+                    <label for="${rowId}-opponent">
+                        <i class="fas fa-baseball-ball"></i>
+                        Opponent
+                    </label>
+                    <input 
+                        type="text" 
+                        id="${rowId}-opponent" 
+                        placeholder="e.g., NYY, LAD"
+                        autocomplete="off"
+                        class="form-input"
+                    >
+                </div>
+                <button type="button" class="btn-remove-player" onclick="removePlayerRow('${rowId}')" ${hideStyle} title="Remove player">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(row);
+        applyDefaultPlaceholders(row);
+        return rowId;
+    }
+
+    // Remove a player row (needs to be global for onclick)
+    window.removePlayerRow = function(rowId) {
+        const row = document.getElementById(rowId);
+        if (row) {
+            row.remove();
+            // Update remove button visibility
+            const rows = document.querySelectorAll('.player-row');
+            if (rows.length === 1) {
+                const removeBtn = rows[0].querySelector('.btn-remove-player');
+                if (removeBtn) {
+                    removeBtn.style.display = 'none';
+                }
+            }
+        }
+    }
+
+    // Get all player entries
+    function getPlayerEntries() {
+        const rows = document.querySelectorAll('.player-row');
+        const entries = [];
+        
+        rows.forEach(row => {
+            const nameInput = row.querySelector('input[id$="-name"]');
+            const teamInput = row.querySelector('input[id$="-team"]');
+            const opponentInput = row.querySelector('input[id$="-opponent"]');
+            
+            if (!nameInput) return;
+            
+            const name = nameInput.value.trim();
+            const team = teamInput ? teamInput.value.trim() : '';
+            const opponent = opponentInput ? opponentInput.value.trim() : '';
+            
+            if (name) {
+                let entry = name;
+                if (team || opponent) {
+                    entry += ' | ' + (team || '');
+                    if (opponent) {
+                        entry += ' | ' + opponent;
+                    }
+                }
+                entries.push(entry);
+            }
+        });
+        
+        return entries;
+    }
+
+    // Initialize with one player row
+    document.addEventListener('DOMContentLoaded', () => {
+        createPlayerRow();
+        loadAppSettings();
+        
+        // Add player button
+        document.getElementById('addPlayerBtn').addEventListener('click', () => {
+            const rowId = createPlayerRow();
+            // Show remove buttons when there's more than one row
+            document.querySelectorAll('.btn-remove-player').forEach(btn => {
+                btn.style.display = 'flex';
+            });
+        });
+    });
+
+    document.getElementById('generateBtn').addEventListener('click', async (e) => {
+        e.preventDefault();
+        
+        // Get player entries from individual boxes
+        const entries = getPlayerEntries();
+        
+        if (entries.length === 0) {
+            showError('Please enter at least one player name');
+            return;
+        }
+        
+        // Count how many entries we have (for batch detection)
+        const isBatch = entries.length > 1;
+
+        // Build the hitter_names string in the format expected by backend
+        const hitterNamesInput = entries.join('\n');
+        
+        const seasonStart = document.getElementById('season_start').value;
+        const useNextSeries = document.getElementById('use_next_series').checked;
+
+        // Show status container
+        document.getElementById('statusContainer').style.display = 'block';
+        document.getElementById('errorContainer').style.display = 'none';
+        document.getElementById('downloadSection').style.display = 'none';
+        document.getElementById('singleDownload').style.display = 'none';
+        document.getElementById('batchDownloads').style.display = 'none';
+        document.getElementById('batchErrors').style.display = 'none';
+        document.getElementById('generateBtn').disabled = true;
+        document.querySelector('.btn-text').textContent = isBatch ? 'Generating Reports...' : 'Generating...';
+
+        try {
+            const response = await fetch('/generate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    hitter_names: hitterNamesInput,
+                    team: getDefaultTeam(),
+                    season_start: seasonStart,
+                    use_next_series: useNextSeries,
+                    opponent_team: getDefaultOpponent()
+                })
+            });
+
+            // Check if response is JSON
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                const text = await response.text();
+                throw new Error(`Server returned non-JSON response: ${text.substring(0, 200)}`);
+            }
+
+            const data = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(data.error || 'Failed to start report generation');
+            }
+
+            currentJobId = data.job_id;
+            startStatusPolling(currentJobId, data.is_batch || false);
+
+        } catch (error) {
+            showError(error.message);
+            resetForm();
+        }
+    });
+
+    function startStatusPolling(jobId, isBatch) {
+        if (statusInterval) {
+            clearInterval(statusInterval);
+        }
+
+        statusInterval = setInterval(async () => {
+            try {
+                const response = await fetch(`/status/${jobId}`);
+                
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    console.error('Non-JSON response from status endpoint:', text.substring(0, 200));
+                    clearInterval(statusInterval);
+                    showError('Server returned invalid response');
+                    resetForm();
+                    return;
+                }
+                
+                const data = await response.json();
+
+                updateStatus(data, isBatch);
+
+                if (data.status === 'completed') {
+                    clearInterval(statusInterval);
+                    if (isBatch && data.pdfs) {
+                        showBatchDownloads(data.pdfs, data.errors || []);
+                    } else {
+                        showDownload(data.pdf_filename);
+                    }
+                    resetForm();
+                } else if (data.status === 'error') {
+                    clearInterval(statusInterval);
+                    showError(data.message);
+                    resetForm();
+                }
+            } catch (error) {
+                clearInterval(statusInterval);
+                showError('Failed to check status: ' + error.message);
+                resetForm();
+            }
+        }, 1000); // Poll every second
+    }
+
+    function updateStatus(status, isBatch) {
+        const statusMessage = document.getElementById('statusMessage');
+        const progressFill = document.getElementById('progressFill');
+        
+        // Update status message
+        statusMessage.textContent = status.message || status.status;
+        
+        // Update progress bar
+        if (isBatch && status.total) {
+            const completed = status.completed || 0;
+            const total = status.total;
+            const progressPercent = Math.round((completed / total) * 100);
+            progressFill.style.width = `${progressPercent}%`;
+            
+            if (status.status === 'running') {
+                progressFill.className = 'progress-fill progress-running';
+            } else if (status.status === 'completed') {
+                progressFill.className = 'progress-fill progress-completed';
+            } else if (status.status === 'error') {
+                progressFill.className = 'progress-fill progress-error';
+            } else {
+                progressFill.className = 'progress-fill progress-queued';
+            }
+        } else {
+            // Single report progress
+            if (status.status === 'queued') {
+                progressFill.style.width = '10%';
+                progressFill.className = 'progress-fill progress-queued';
+            } else if (status.status === 'running') {
+                progressFill.style.width = '50%';
+                progressFill.className = 'progress-fill progress-running';
+            } else if (status.status === 'completed') {
+                progressFill.style.width = '100%';
+                progressFill.className = 'progress-fill progress-completed';
+            } else if (status.status === 'error') {
+                progressFill.style.width = '0%';
+                progressFill.className = 'progress-fill progress-error';
+            }
+        }
+    }
+
+    function showDownload(filename) {
+        const downloadSection = document.getElementById('downloadSection');
+        const singleDownload = document.getElementById('singleDownload');
+        const downloadLink = document.getElementById('downloadLink');
+        downloadLink.href = `/download/${currentJobId}`;
+        downloadLink.download = filename;
+        singleDownload.style.display = 'block';
+        downloadSection.style.display = 'block';
+    }
+
+
+    function showBatchDownloads(pdfs, errors) {
+        const downloadSection = document.getElementById('downloadSection');
+        const batchDownloads = document.getElementById('batchDownloads');
+        const batchDownloadsList = document.getElementById('batchDownloadsList');
+        const batchErrors = document.getElementById('batchErrors');
+        const batchErrorsList = document.getElementById('batchErrorsList');
+        const reportCount = document.getElementById('reportCount');
+        const errorCount = document.getElementById('errorCount');
+        
+        // Clear previous content
+        batchDownloadsList.innerHTML = '';
+        batchErrorsList.innerHTML = '';
+        
+        // Show successful downloads
+        if (pdfs && pdfs.length > 0) {
+            batchDownloads.style.display = 'block';
+            reportCount.textContent = `${pdfs.length} report${pdfs.length > 1 ? 's' : ''}`;
+            
+            pdfs.forEach((pdf, index) => {
+                const downloadItem = document.createElement('div');
+                downloadItem.className = 'report-item';
+                
+                // Build meta info
+                let metaParts = [];
+                if (pdf.team && pdf.team !== 'AUTO') {
+                    metaParts.push(`Team: ${pdf.team}`);
+                }
+                if (pdf.opponent) {
+                    metaParts.push(`vs ${pdf.opponent}`);
+                }
+                const metaText = metaParts.join(' | ');
+                
+                downloadItem.innerHTML = `
+                    <div class="report-item-info">
+                        <div class="report-item-name">${pdf.player}</div>
+                        ${metaText ? `<div class="report-item-meta">${metaText}</div>` : ''}
+                    </div>
+                        <a href="/download/${currentJobId}/${index}" download="${pdf.filename}" 
+                           class="btn btn-success" 
+                           style="padding: 10px 20px; font-size: 0.9rem; text-decoration: none; display: inline-block; white-space: nowrap;">
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                `;
+                batchDownloadsList.appendChild(downloadItem);
+            });
+        }
+        
+        // Show errors if any
+        if (errors && errors.length > 0) {
+            batchErrors.style.display = 'block';
+            errorCount.textContent = `${errors.length} error${errors.length > 1 ? 's' : ''}`;
+            
+            errors.forEach(error => {
+                const errorItem = document.createElement('div');
+                errorItem.className = 'error-item';
+                errorItem.innerHTML = `
+                    <strong style="color: var(--color-danger);">${error.player || 'Unknown'}:</strong>
+                    <span style="margin-left: 8px;">${error.error}</span>
+                `;
+                batchErrorsList.appendChild(errorItem);
+            });
+        }
+        
+        downloadSection.style.display = 'block';
+    }
+
+    function showError(message) {
+        document.getElementById('errorContainer').style.display = 'block';
+        document.getElementById('errorText').textContent = message;
+    }
+
+    function resetForm() {
+        document.getElementById('generateBtn').disabled = false;
+        document.querySelector('.btn-text').textContent = 'Generate Report';
+    }
+
+    document.getElementById('closeStatus').addEventListener('click', () => {
+        document.getElementById('statusContainer').style.display = 'none';
+        if (statusInterval) {
+            clearInterval(statusInterval);
+            statusInterval = null;
+        }
+        // Reset form to initial state
+        resetForm();
+    });
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.form-container {
+    margin-bottom: 2rem;
+}
+
+.form-card {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 20px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: var(--shadow-elevated);
+}
+
+.form-section {
+    padding: 2.5rem;
+    border-bottom: 2px solid var(--color-border);
+}
+
+.form-section:last-of-type {
+    border-bottom: none;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.section-icon {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, rgba(255, 127, 0, 0.15), rgba(255, 149, 0, 0.1));
+    border: 2px solid rgba(255, 127, 0, 0.3);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.section-icon i {
+    font-size: 24px;
+    color: var(--color-accent);
+}
+
+.section-title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin: 0 0 0.5rem 0;
+}
+
+.section-description {
+    color: var(--color-text-subtle);
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.players-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.player-row {
+    background: var(--color-layer-soft);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 12px;
+    padding: 1rem 3.5rem 1rem 1rem;
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.player-row:hover {
+    border-color: var(--color-border-strong);
+    box-shadow: var(--shadow-floating);
+}
+
+.btn-remove-player {
+    position: absolute;
+    top: 50%;
+    right: 0.75rem;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 2px solid rgba(239, 68, 68, 0.3);
+    border-radius: 6px;
+    color: var(--color-danger);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+    padding: 0;
+    z-index: 10;
+}
+
+.btn-remove-player:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: var(--color-danger);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.player-row-content {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
+    align-items: center;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.player-row-content .form-group {
+    flex: 1;
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.player-row-content .form-group:first-child {
+    flex: 2.5;
+    min-width: 180px;
+}
+
+.player-row-content .form-group:nth-child(2) {
+    flex: 1.5;
+    min-width: 120px;
+}
+
+.player-row-content .form-group:nth-child(3) {
+    flex: 1.5;
+    min-width: 120px;
+}
+
+.player-row .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.player-row .form-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 0;
+}
+
+.player-row .form-group label i {
+    color: var(--color-accent);
+    font-size: 0.8rem;
+}
+
+.player-row .form-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0.625rem 0.875rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+}
+
+.player-row .form-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(255, 127, 0, 0.1);
+    background: color-mix(in srgb, var(--color-surface) 92%, var(--color-page-bg));
+}
+
+.form-input::placeholder {
+    color: var(--color-border-subtle);
+}
+
+.btn-add-player {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, rgba(255, 127, 0, 0.1), rgba(255, 149, 0, 0.05));
+    border: 2px dashed rgba(255, 127, 0, 0.4);
+    border-radius: 12px;
+    color: var(--color-accent);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-bottom: 1.5rem;
+}
+
+.btn-add-player:hover {
+    background: linear-gradient(135deg, rgba(255, 127, 0, 0.2), rgba(255, 149, 0, 0.1));
+    border-color: var(--color-accent);
+    border-style: solid;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.2);
+}
+
+.btn-add-player i {
+    font-size: 1.1rem;
+}
+
+.form-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: rgba(255, 127, 0, 0.05);
+    border: 1px solid rgba(255, 127, 0, 0.2);
+    border-radius: 8px;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+.form-hint i {
+    color: var(--color-accent);
+    margin-top: 0.2rem;
+    flex-shrink: 0;
+}
+
+.settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+}
+
+.checkbox-wrapper {
+    display: flex;
+    align-items: center;
+}
+
+.checkbox-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    cursor: pointer;
+    padding: 1rem;
+    background: var(--color-layer-soft);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 12px;
+    transition: all 0.3s ease;
+    width: 100%;
+}
+
+.checkbox-label:hover {
+    border-color: var(--color-border-strong);
+    background: color-mix(in srgb, var(--color-layer-soft) 90%, var(--color-surface));
+}
+
+.checkbox-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.checkbox-custom {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--color-border-strong);
+    border-radius: 6px;
+    background: var(--color-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+    transition: all 0.3s ease;
+}
+
+.checkbox-input:checked + .checkbox-custom {
+    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-bright));
+    border-color: var(--color-accent);
+}
+
+.checkbox-input:checked + .checkbox-custom::after {
+    content: '✓';
+    color: var(--color-text-primary);
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.checkbox-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.checkbox-text strong {
+    color: var(--color-text-primary);
+    font-size: 1rem;
+}
+
+.checkbox-text small {
+    color: var(--color-text-subtle);
+    font-size: 0.85rem;
+}
+
+.form-actions {
+    padding: 2rem;
+    background: var(--color-layer-soft);
+    border-top: 1px solid var(--color-border);
+}
+
+.btn-generate {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    padding: 1.25rem 2rem;
+    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-bright));
+    border: none;
+    border-radius: 12px;
+    color: var(--color-text-primary);
+    font-weight: 700;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 20px rgba(255, 127, 0, 0.3);
+}
+
+.btn-generate:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 30px rgba(255, 127, 0, 0.4);
+    gap: 1.25rem;
+}
+
+.btn-generate:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-generate i {
+    font-size: 1.2rem;
+}
+
+.btn-arrow {
+    transition: transform 0.3s ease;
+}
+
+.btn-generate:hover:not(:disabled) .btn-arrow {
+    transform: translateX(4px);
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .section-hero {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .section-hero-meta {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .form-section {
+        padding: 1.5rem;
+    }
+    
+    .player-row {
+        padding: 0.875rem 3rem 0.875rem 0.875rem;
+    }
+    
+    .player-row-content {
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    
+    .player-row-content .form-group {
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+    }
+    
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .section-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+}
+</style>
+{% endblock %}

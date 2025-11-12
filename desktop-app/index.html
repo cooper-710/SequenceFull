@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scouting Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: #333;
+        }
+
+        .app-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            width: 100%;
+            max-width: 900px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            max-height: 90vh;
+        }
+
+        .title-bar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 40px;
+            text-align: center;
+            -webkit-app-region: drag;
+        }
+
+        .title-bar h1 {
+            font-size: 2.2rem;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .title-bar .subtitle {
+            font-size: 1rem;
+            opacity: 0.95;
+        }
+
+        .content {
+            padding: 40px;
+            overflow-y: auto;
+            flex: 1;
+        }
+
+        .form-group {
+            margin-bottom: 24px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+            font-size: 0.95rem;
+        }
+
+        input[type="text"],
+        input[type="date"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        input[type="text"]:focus,
+        input[type="date"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .btn {
+            padding: 14px 32px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-success {
+            background: #10b981;
+            color: white;
+            margin-top: 12px;
+        }
+
+        .btn-success:hover {
+            background: #059669;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+        }
+
+        .status-container {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .status-card {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 24px;
+            border: 2px solid #e0e0e0;
+        }
+
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .status-header h3 {
+            font-size: 1.2rem;
+            color: #333;
+        }
+
+        .status-message {
+            font-size: 1rem;
+            color: #555;
+            margin-bottom: 12px;
+            min-height: 24px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            transition: width 0.3s ease, background-color 0.3s ease;
+            border-radius: 4px;
+            width: 0%;
+            background: #94a3b8;
+        }
+
+        .progress-fill.running {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        .progress-fill.completed {
+            background: #10b981;
+            width: 100%;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .error-message {
+            background: #fee2e2;
+            border: 2px solid #ef4444;
+            color: #991b1b;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        .download-section {
+            text-align: center;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+        }
+
+        .log-output {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.85rem;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 12px;
+            display: none;
+        }
+
+        .log-output.active {
+            display: block;
+        }
+
+        .log-line {
+            margin: 2px 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .small-text {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 6px;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .title-bar h1 {
+                font-size: 1.8rem;
+            }
+
+            .content {
+                padding: 30px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="title-bar">
+            <h1>⚾ Scouting Report</h1>
+            <div class="subtitle">Generate professional scouting reports</div>
+        </div>
+
+        <div class="content">
+            <form id="reportForm">
+                <div class="form-group">
+                    <label for="hitter_name">Player Name *</label>
+                    <input 
+                        type="text" 
+                        id="hitter_name" 
+                        name="hitter_name" 
+                        placeholder="e.g., Pete Alonso, Harrison Bader"
+                        required
+                        autocomplete="off"
+                    >
+                    <div class="small-text">Enter the full name of the player</div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="team">Team</label>
+                        <input 
+                            type="text" 
+                            id="team" 
+                            name="team" 
+                            placeholder="AUTO (auto-detect)"
+                            value="AUTO"
+                            autocomplete="off"
+                        >
+                        <div class="small-text">Team abbreviation or AUTO</div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="season_start">Season Start</label>
+                        <input 
+                            type="date" 
+                            id="season_start" 
+                            name="season_start" 
+                            value="2025-03-20"
+                        >
+                    </div>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <input 
+                        type="checkbox" 
+                        id="use_next_series" 
+                        name="use_next_series"
+                    >
+                    <label for="use_next_series" style="margin: 0;">Use next series instead of next game</label>
+                </div>
+
+                <button type="submit" id="generateBtn" class="btn btn-primary">
+                    <span id="btnText">Generate Report</span>
+                    <span id="btnSpinner" style="display: none;">⏳</span>
+                </button>
+            </form>
+
+            <div id="statusContainer" class="status-container">
+                <div class="status-card">
+                    <div class="status-header">
+                        <h3>Generation Status</h3>
+                    </div>
+                    <div class="status-content">
+                        <div class="status-message" id="statusMessage">Preparing...</div>
+                        <div class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                        <div id="logOutput" class="log-output"></div>
+                    </div>
+                    <div id="downloadSection" class="download-section" style="display: none;">
+                        <button id="openPDFBtn" class="btn btn-success">📄 Open Report</button>
+                        <button id="openFolderBtn" class="btn btn-success" style="margin-top: 8px;">📁 Open Reports Folder</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="errorContainer" class="error-message">
+                <strong>Error:</strong> <span id="errorText"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Wait for DOM to be ready
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                const form = document.getElementById('reportForm');
+                const generateBtn = document.getElementById('generateBtn');
+                const statusContainer = document.getElementById('statusContainer');
+                const statusMessage = document.getElementById('statusMessage');
+                const progressFill = document.getElementById('progressFill');
+                const logOutput = document.getElementById('logOutput');
+                const downloadSection = document.getElementById('downloadSection');
+                const errorContainer = document.getElementById('errorContainer');
+                const errorText = document.getElementById('errorText');
+                const btnText = document.getElementById('btnText');
+                const btnSpinner = document.getElementById('btnSpinner');
+
+                if (!form || !generateBtn) {
+                    console.error('Required form elements not found');
+                    return;
+                }
+
+                let currentPDFPath = null;
+
+                // Listen for progress updates (only if Electron API is available)
+                if (window.electronAPI && window.electronAPI.onReportProgress) {
+                    window.electronAPI.onReportProgress((data) => {
+                        if (data.type === 'stdout' || data.type === 'stderr') {
+                            logOutput.classList.add('active');
+                            const logLine = document.createElement('div');
+                            logLine.className = 'log-line';
+                            logLine.textContent = data.data;
+                            logOutput.appendChild(logLine);
+                            logOutput.scrollTop = logOutput.scrollHeight;
+                        }
+                    });
+                }
+
+                form.addEventListener('submit', async (e) => {
+                    e.preventDefault();
+
+                    const hitterName = document.getElementById('hitter_name').value.trim();
+                    const team = document.getElementById('team').value.trim() || 'AUTO';
+                    const seasonStart = document.getElementById('season_start').value;
+                    const useNextSeries = document.getElementById('use_next_series').checked;
+
+                    if (!hitterName) {
+                        showError('Please enter a player name');
+                        return;
+                    }
+
+                    // Reset UI
+                    statusContainer.style.display = 'block';
+                    errorContainer.style.display = 'none';
+                    downloadSection.style.display = 'none';
+                    logOutput.innerHTML = '';
+                    logOutput.classList.remove('active');
+                    generateBtn.disabled = true;
+                    btnText.textContent = 'Generating...';
+                    btnSpinner.style.display = 'inline';
+                    progressFill.className = 'progress-fill running';
+                    progressFill.style.width = '10%';
+                    statusMessage.textContent = 'Starting report generation...';
+
+                    try {
+                        if (!window.electronAPI || !window.electronAPI.generateReport) {
+                            throw new Error('Electron API not available. Please run this in the Electron app.');
+                        }
+
+                        const result = await window.electronAPI.generateReport({
+                            hitterName,
+                            team,
+                            seasonStart,
+                            useNextSeries
+                        });
+
+                        if (result.success) {
+                            progressFill.className = 'progress-fill completed';
+                            progressFill.style.width = '100%';
+                            statusMessage.textContent = `Report generated successfully: ${result.filename}`;
+                            currentPDFPath = result.pdfPath;
+                            downloadSection.style.display = 'block';
+                        } else {
+                            throw new Error('Report generation failed');
+                        }
+                    } catch (error) {
+                        progressFill.style.width = '0%';
+                        progressFill.className = 'progress-fill';
+                        showError(error.message || 'Failed to generate report');
+                    } finally {
+                        generateBtn.disabled = false;
+                        btnText.textContent = 'Generate Report';
+                        btnSpinner.style.display = 'none';
+                    }
+                });
+
+                document.getElementById('openPDFBtn').addEventListener('click', async () => {
+                    if (currentPDFPath && window.electronAPI && window.electronAPI.openPDF) {
+                        await window.electronAPI.openPDF(currentPDFPath);
+                    }
+                });
+
+                document.getElementById('openFolderBtn').addEventListener('click', async () => {
+                    // Open the build/pdf folder
+                    if (window.electronAPI && window.electronAPI.openFolder) {
+                        const pdfPath = currentPDFPath || '';
+                        const folderPath = pdfPath.substring(0, pdfPath.lastIndexOf('/') || pdfPath.lastIndexOf('\\'));
+                        if (folderPath) {
+                            await window.electronAPI.openFolder(folderPath);
+                        }
+                    }
+                });
+
+                function showError(message) {
+                    if (errorContainer && errorText) {
+                        errorContainer.style.display = 'block';
+                        errorText.textContent = message;
+                        if (statusContainer) {
+                            statusContainer.style.display = 'none';
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                document.body.innerHTML = '<div style="padding: 40px; text-align: center;"><h1>Error Loading App</h1><p>' + error.message + '</p></div>';
+            }
+        });
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container auth-page">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h1>Welcome Back</h1>
+            <p>Sign in to access your personalized scouting tools.</p>
+        </div>
+        <form method="post" class="auth-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            {% if request.args.get('next') %}
+            <input type="hidden" name="next" value="{{ request.args.get('next') }}">
+            {% endif %}
+            <div class="auth-field">
+                <label for="email">
+                    <span class="field-label">Email</span>
+                </label>
+                <div class="input-wrapper">
+                    <span class="input-icon"><i class="fas fa-envelope"></i></span>
+                    <input type="email" id="email" name="email" placeholder="name@team.com" autocomplete="username" required autofocus>
+                </div>
+            </div>
+            <div class="auth-field">
+                <label for="password">
+                    <span class="field-label">Password</span>
+                </label>
+                <div class="input-wrapper">
+                    <span class="input-icon"><i class="fas fa-lock"></i></span>
+                    <input type="password" id="password" name="password" placeholder="Enter your password" autocomplete="current-password" required>
+                </div>
+            </div>
+            <button type="submit" class="auth-submit">
+                <span>Sign In</span>
+                <i class="fas fa-arrow-right"></i>
+            </button>
+        </form>
+        <div class="auth-switch">
+            <span>Need an account?</span>
+            <a href="{{ url_for('register', next=request.args.get('next') or request.path) }}">Create one</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

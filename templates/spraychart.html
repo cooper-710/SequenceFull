@@ -1,0 +1,1382 @@
+{% extends "base.html" %}
+{% from 'partials/idle_placeholder.html' import idle_placeholder %}
+
+{% block title %}Spray Chart - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Spray Chart</h1>
+                <p class="page-subtitle">Visualize where batted balls land on the field</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="spraychart-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Player Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="playerSearch" 
+                        class="control-input" 
+                        placeholder="Type to search players..."
+                        autocomplete="off"
+                    >
+                    <div id="playerSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedPlayerDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedPlayerName"></span>
+                    <button id="clearPlayer" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Event Type</label>
+                <select id="eventTypeSelect" class="control-select">
+                    <option value="">All Events</option>
+                    <option value="single">Single</option>
+                    <option value="double">Double</option>
+                    <option value="triple">Triple</option>
+                    <option value="home_run">Home Run</option>
+                    <option value="field_out">Out</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Min Launch Speed (mph)</label>
+                <input type="number" id="minLaunchSpeed" class="control-input" placeholder="e.g. 95" step="1" min="0" max="120">
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Max Launch Speed (mph)</label>
+                <input type="number" id="maxLaunchSpeed" class="control-input" placeholder="e.g. 110" step="1" min="0" max="120">
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Min Launch Angle (°)</label>
+                <input type="number" id="minLaunchAngle" class="control-input" placeholder="e.g. 8" step="1" min="-90" max="90">
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Max Launch Angle (°)</label>
+                <input type="number" id="maxLaunchAngle" class="control-input" placeholder="e.g. 50" step="1" min="-90" max="90">
+            </div>
+
+            <button id="generateSprayChart" class="generate-btn" type="button">
+                <i class="fas fa-baseball-ball"></i> Generate Spray Chart
+            </button>
+        </div>
+
+        <!-- Spray Chart Visualization -->
+        <div class="spraychart-container">
+            <div class="spraychart-wrapper heatmap-wrapper">
+                <canvas id="spraychartCanvas"></canvas>
+                <div id="spraychartTooltip" class="spraychart-tooltip" style="display: none;"></div>
+                {{ idle_placeholder('spraychartPlaceholder') }}
+            </div>
+            <div id="spraychartInfo" class="spraychart-info">
+                <p>Select a player and click "Generate Spray Chart" to visualize batted ball locations.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Field dimensions (in feet)
+// Home plate is at (125.42, 198.27) in Statcast coordinates
+// The field is roughly 400 feet deep at center field
+// Left field is around 330-350 feet, right field is around 330-350 feet
+const FIELD_CONFIG = {
+    // Statcast coordinate system
+    homePlateX: 125.42,
+    homePlateY: 198.27,
+    
+    // Field dimensions (approximate)
+    leftFieldLine: 330,
+    centerField: 400,
+    rightFieldLine: 330,
+    
+    // Foul lines angle (approximately 45 degrees from center)
+    foulLineAngle: Math.PI / 4,
+    
+    // Infield dimensions
+    infieldRadius: 90, // feet
+    pitcherMoundX: 125.42,
+    pitcherMoundY: 198.27 - 60.5, // 60.5 feet from home plate
+};
+
+// Event type colors
+const EVENT_COLORS = {
+    'single': 'color-mix(in srgb, var(--color-success) 80%, #6ee7b7)',
+    'double': '#2196F3',
+    'triple': '#9C27B0',
+    'home_run': 'var(--color-danger)',
+    'field_out': '#FF9800',
+    'default': '#9E9E9E'
+};
+
+let selectedPlayer = null;
+let sprayChartData = null;
+
+function setSpraychartPlaceholderVisible(visible) {
+    const placeholder = document.getElementById('spraychartPlaceholder');
+    if (!placeholder) return;
+    if (visible) {
+        placeholder.classList.remove('hidden');
+    } else {
+        placeholder.classList.add('hidden');
+    }
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadFilterOptions();
+    setupPlayerSearch();
+    setSpraychartPlaceholderVisible(true);
+    
+    const generateBtn = document.getElementById('generateSprayChart');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+        generateBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!selectedPlayer) {
+                alert('Please select a player first');
+                return;
+            }
+            this.classList.remove('disabled');
+            generateSprayChart();
+        });
+    }
+
+    document.getElementById('clearPlayer').addEventListener('click', function() {
+        clearPlayerSelection();
+    });
+});
+
+async function loadFilterOptions() {
+    try {
+        const response = await fetch('/api/analytics/players');
+        const data = await response.json();
+        if (data.players) {
+            console.log(`Loaded ${data.players.length} players for search`);
+        }
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
+}
+
+async function loadPlayerSeasons(playerName) {
+    try {
+        const encodedName = encodeURIComponent(playerName);
+        const response = await fetch(`/api/csv/player/${encodedName}/seasons`);
+        
+        if (!response.ok) {
+            const seasonSelect = document.getElementById('seasonSelect');
+            if (seasonSelect) {
+                seasonSelect.innerHTML = '<option value="">Error loading seasons</option>';
+            }
+            return;
+        }
+        
+        const data = await response.json();
+        const seasons = data.seasons || [];
+        
+        const seasonSelect = document.getElementById('seasonSelect');
+        if (!seasonSelect) return;
+        
+        seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+        
+        if (seasons.length === 0) {
+            seasonSelect.innerHTML = '<option value="">No seasons available</option>';
+        } else {
+            const sortedSeasons = [...seasons].sort((a, b) => {
+                const aInt = parseInt(a) || 0;
+                const bInt = parseInt(b) || 0;
+                return bInt - aInt;
+            });
+            
+            sortedSeasons.forEach(season => {
+                const option = document.createElement('option');
+                option.value = season;
+                option.textContent = season;
+                seasonSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading player seasons:', error);
+    }
+}
+
+let searchTimeout = null;
+
+function setupPlayerSearch() {
+    const input = document.getElementById('playerSearch');
+    const dropdown = document.getElementById('playerSearchDropdown');
+    
+    if (!input || !dropdown) return;
+    
+    input.disabled = false;
+    input.readOnly = false;
+    input.style.pointerEvents = 'auto';
+    
+    async function searchPlayers() {
+        const searchTerm = input.value.trim();
+        
+        if (!searchTerm || searchTerm.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/csv/search?q=${encodeURIComponent(searchTerm)}`);
+            const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+            
+            const players = data.players || [];
+            
+            if (players.length === 0) {
+                dropdown.innerHTML = '<div class="player-dropdown-item" style="color: var(--color-text-muted);">No players found</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            dropdown.innerHTML = players.slice(0, 10).map(player => 
+                `<div class="player-dropdown-item" data-player="${player.name.replace(/"/g, '&quot;')}">${player.name}</div>`
+            ).join('');
+            dropdown.style.display = 'block';
+            
+            dropdown.querySelectorAll('.player-dropdown-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const playerName = this.getAttribute('data-player');
+                    if (playerName && !playerName.includes('No players found')) {
+                        selectPlayer(playerName);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Search error:', error);
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    input.addEventListener('input', function(e) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(searchPlayers, 300);
+    });
+    
+    input.addEventListener('focus', function() {
+        if (this.value.trim().length >= 2) {
+            searchPlayers();
+        }
+    });
+    
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(searchTimeout);
+            const firstMatch = dropdown.querySelector('.player-dropdown-item[data-player]');
+            if (firstMatch && !firstMatch.textContent.includes('No players found')) {
+                firstMatch.click();
+            } else if (this.value.trim().length >= 2) {
+                selectPlayer(this.value.trim());
+            }
+        }
+    });
+    
+    document.addEventListener('click', function(e) {
+        if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+async function selectPlayer(playerName) {
+    selectedPlayer = playerName;
+    document.getElementById('selectedPlayerName').textContent = playerName;
+    document.getElementById('selectedPlayerDisplay').style.display = 'flex';
+    const searchInput = document.getElementById('playerSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('playerSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    const generateBtn = document.getElementById('generateSprayChart');
+    if (generateBtn) {
+        generateBtn.classList.remove('disabled');
+    }
+    await loadPlayerSeasons(playerName);
+}
+
+function clearPlayerSelection() {
+    selectedPlayer = null;
+    document.getElementById('selectedPlayerDisplay').style.display = 'none';
+    document.getElementById('playerSearch').value = '';
+    const generateBtn = document.getElementById('generateSprayChart');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+    }
+    
+    const seasonSelect = document.getElementById('seasonSelect');
+    seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+    
+    const canvas = document.getElementById('spraychartCanvas');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+    }
+    
+    hideSprayChartTooltip();
+    sprayChartData = null;
+    
+    const info = document.getElementById('spraychartInfo');
+    info.innerHTML = '<p>Select a player and click "Generate Spray Chart" to visualize batted ball locations.</p>';
+    setSpraychartPlaceholderVisible(true);
+}
+
+async function generateSprayChart() {
+    if (!selectedPlayer) {
+        alert('Please select a player first');
+        return;
+    }
+
+    const season = document.getElementById('seasonSelect').value;
+    const eventType = document.getElementById('eventTypeSelect').value;
+    const minLaunchSpeed = document.getElementById('minLaunchSpeed').value;
+    const maxLaunchSpeed = document.getElementById('maxLaunchSpeed').value;
+    const minLaunchAngle = document.getElementById('minLaunchAngle').value;
+    const maxLaunchAngle = document.getElementById('maxLaunchAngle').value;
+
+    hideSprayChartTooltip();
+
+    const info = document.getElementById('spraychartInfo');
+    info.innerHTML = `
+        <div class="spraychart-info-message spraychart-info-loading">
+            <div class="spraychart-info-title">Generating Spray Chart…</div>
+            <div class="spraychart-info-text">Fetching batted ball data from Statcast.</div>
+        </div>
+    `;
+
+    try {
+        const params = new URLSearchParams({
+            player: selectedPlayer
+        });
+
+        if (season) params.append('season', season);
+        if (eventType) params.append('event_type', eventType);
+        if (minLaunchSpeed) params.append('min_launch_speed', minLaunchSpeed);
+        if (maxLaunchSpeed) params.append('max_launch_speed', maxLaunchSpeed);
+        if (minLaunchAngle) params.append('min_launch_angle', minLaunchAngle);
+        if (maxLaunchAngle) params.append('max_launch_angle', maxLaunchAngle);
+
+        const response = await fetch(`/api/visuals/spraychart?${params.toString()}`);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Failed to fetch spray chart data');
+        }
+
+        const data = await response.json();
+        sprayChartData = data;
+        drawSprayChart(data);
+    } catch (error) {
+        console.error('Error generating spray chart:', error);
+        info.innerHTML = `
+            <div class="spraychart-info-message spraychart-info-warning">
+                <div class="spraychart-info-title">Unable to generate spray chart</div>
+                <div class="spraychart-info-text">${error.message}</div>
+            </div>
+        `;
+        setSpraychartPlaceholderVisible(true);
+    }
+}
+
+function drawSprayChart(data) {
+    const canvas = document.getElementById('spraychartCanvas');
+    const info = document.getElementById('spraychartInfo');
+    
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    
+    // Check for errors first
+    if (data.error) {
+        if (info) {
+            info.innerHTML = `<p style="color: var(--color-danger);">Error: ${data.error}</p>`;
+        }
+        setSpraychartPlaceholderVisible(true);
+        return;
+    }
+
+    if (!data.data || data.data.length === 0) {
+        if (info) {
+            info.innerHTML = `<p style="color: var(--color-danger);">No batted ball data available for the selected filters.</p>`;
+        }
+        setSpraychartPlaceholderVisible(true);
+        return;
+    }
+    
+    const sprayData = data.data;
+    const statcastHomeX = 125.42;
+    const statcastHomeY = 198.27;
+    
+    // Calculate distances for all balls to determine fence and stadium lines
+    let maxDistance = 0;
+    let maxNonHomerDistance = 0;
+    const homeRuns = [];
+    const nonHomeRuns = [];
+    
+    // Track the actual bounds of all balls (including foul territory)
+    let maxBallDistance = 0;
+    let maxBallAngle = -Math.PI / 2; // Initialize to left side
+    let minBallAngle = Math.PI / 2; // Initialize to right side
+    
+    // Convert hit_distance (feet) to Statcast coordinate units if available
+    // Rough conversion: 1 foot ≈ 0.5 Statcast coordinate units (approximate)
+    // But we'll use the actual coordinate distance for consistency
+    sprayData.forEach(point => {
+        const deltaX = point.x - statcastHomeX;
+        const deltaY = statcastHomeY - point.y;
+        const totalDistance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        
+        // Track the maximum distance and angles for all balls
+        maxBallDistance = Math.max(maxBallDistance, totalDistance);
+        
+        // Calculate angle from home plate (in canvas coordinate system)
+        // Angle from vertical (center field direction)
+        const angle = Math.atan2(deltaX, deltaY); // Positive X = right, positive Y = up
+        maxBallAngle = Math.max(maxBallAngle, angle);
+        minBallAngle = Math.min(minBallAngle, angle);
+        
+        if (point.event === 'home_run') {
+            homeRuns.push({ point, distance: totalDistance, deltaX, deltaY });
+            maxDistance = Math.max(maxDistance, totalDistance);
+        } else {
+            nonHomeRuns.push({ point, distance: totalDistance, deltaX, deltaY });
+            maxNonHomerDistance = Math.max(maxNonHomerDistance, totalDistance);
+            maxDistance = Math.max(maxDistance, totalDistance);
+        }
+    });
+    
+    // FIXED field boundaries - never change, static image
+    // Yellow line = homerun line (fence) - fixed at 290 feet
+    const FIXED_FENCE_DISTANCE = 145; // 290 feet in Statcast units - fixed, never changes
+    const fenceDistance = FIXED_FENCE_DISTANCE;
+    
+    // White dashed line = stadium line - fixed at 400 feet
+    const FIXED_STADIUM_DISTANCE = 200; // 400 feet in Statcast units - fixed, never changes
+    const stadiumDistance = FIXED_STADIUM_DISTANCE;
+    
+    // Calculate the actual bounds needed to show all balls (including foul territory)
+    const foulLineAngle = Math.PI / 4; // 45 degrees (standard foul line)
+    
+    // Extend the clipping angle to include all balls, with some margin
+    // Use the actual ball angles plus a small margin
+    const angleMargin = Math.PI / 18; // 10 degrees margin
+    const extendedLeftAngle = Math.min(minBallAngle - angleMargin, -(foulLineAngle + Math.PI / 18));
+    const extendedRightAngle = Math.max(maxBallAngle + angleMargin, foulLineAngle + Math.PI / 18);
+    
+    // Calculate the maximum extent needed for canvas sizing
+    // Field is static, but we need to show all balls even if they go beyond the fixed stadium line
+    // Ensure we have a valid maxBallDistance first
+    if (maxBallDistance <= 0) {
+        maxBallDistance = stadiumDistance; // Default to stadium line if no balls
+    }
+    // Use the maximum of ball distances or stadium line to ensure everything is visible
+    // The field (including fence and stadium line) is static, but canvas may need to extend for balls
+    const maxExtent = Math.max(maxBallDistance, stadiumDistance) * 1.02; // Small padding beyond furthest point
+    
+    // Get container width for initial calculations
+    const container = canvas.parentElement;
+    const baseWidth = Math.min(container.clientWidth - 40, 700);
+    
+    // Calculate scale and positioning to fit all balls without deadspace
+    const padding = 20;
+    
+    // Calculate the height needed based on the maximum extent
+    // The field extends from home plate (bottom) to maxExtent (top)
+    // Increase bottom padding significantly to ensure home plate and infield are fully visible
+    // Home plate and infield elements extend below the center point
+    const bottomPadding = 80; // More space for home plate area with graceful transition
+    const topPadding = padding;
+    
+    // Calculate scale based on width (horizontal extent) and height
+    // Use standard foul line angle (45 degrees) for width, not extended angles
+    // Extended angles can cause incorrect scaling with lots of data
+    const standardFoulAngleForScale = Math.PI / 4; // 45 degrees
+    const maxWidth = maxExtent * Math.sin(standardFoulAngleForScale) * 2;
+    const availableWidth = baseWidth - (padding * 2);
+    const scaleX = (availableWidth * 0.98) / maxWidth;
+    
+    // Calculate optimal height based on content
+    const optimalHeight = maxExtent * 1.1 + bottomPadding + topPadding; // Estimate
+    
+    // Scale based on height - use most of the optimal height
+    const scaleY = (optimalHeight * 0.95) / maxExtent;
+    
+    // Use the smaller scale to ensure everything fits
+    const scale = Math.min(scaleX, scaleY);
+    
+    // Now set canvas size based on optimal dimensions
+    const dpr = window.devicePixelRatio || 1;
+    
+    // Calculate actual optimal height based on the scale
+    // Add extra space for infield/home plate area that extends below centerY
+    const infieldExtension = 60; // Space needed for infield and home plate below centerY with graceful transition
+    const actualOptimalHeight = maxExtent * scale + bottomPadding + topPadding + infieldExtension;
+    const canvasWidth = baseWidth;
+    // Ensure canvas height is reasonable - at least 300px, but not taller than width
+    const canvasHeight = Math.max(300, Math.min(actualOptimalHeight, baseWidth));
+    
+    canvas.width = canvasWidth * dpr;
+    canvas.height = canvasHeight * dpr;
+    canvas.style.width = canvasWidth + 'px';
+    canvas.style.height = canvasHeight + 'px';
+    
+    // Re-create context with new dimensions
+    const newCtx = canvas.getContext('2d');
+    if (!newCtx) {
+        console.error('Failed to get canvas context');
+        return;
+    }
+    newCtx.scale(dpr, dpr);
+    
+    // Update centerY based on actual canvas height
+    const actualCenterY = canvasHeight - bottomPadding;
+    const actualCenterX = canvasWidth / 2;
+    
+    // Clear canvas with dark green field background
+    newCtx.fillStyle = '#0a2810'; // Dark green field
+    newCtx.fillRect(0, 0, canvasWidth, canvasHeight);
+    
+    // Recalculate scale based on actual canvas dimensions
+    // Ensure maxExtent is positive and valid
+    if (maxExtent <= 0 || !isFinite(maxExtent)) {
+        maxExtent = 200; // Default fallback
+    }
+    
+    // Use standard foul line angle (45 degrees) for width calculation, not extended angles
+    // Extended angles can be very large with lots of data, causing incorrect scaling
+    const standardFoulAngle = Math.PI / 4; // 45 degrees
+    const actualMaxWidth = maxExtent * Math.sin(standardFoulAngle) * 2;
+    const actualAvailableWidth = Math.max(canvasWidth - (padding * 2), 100);
+    const actualScaleX = actualMaxWidth > 0 ? (actualAvailableWidth * 0.98) / actualMaxWidth : 1;
+    
+    const actualAvailableHeight = Math.max(canvasHeight - (bottomPadding + topPadding), 100);
+    const actualScaleY = maxExtent > 0 ? (actualAvailableHeight * 0.95) / maxExtent : 1;
+    
+    // Ensure scale is positive and valid
+    const actualScale = Math.max(0.1, Math.min(actualScaleX, actualScaleY));
+    
+    // Calculate clipping radius - make it larger to ensure we don't clip everything
+    const clippingRadius = Math.max(10, maxExtent * actualScale * 1.1); // 10% extra to avoid clipping content
+    
+    // Convert angles to canvas coordinate system
+    // In canvas: 0° = right, 90° = down, 180° = left, 270° = up
+    // Our angles are from vertical (center field), so we need to convert
+    // Center field is at 270° (3π/2)
+    // Left extends negative from center, right extends positive
+    const leftFoulAngleClipping = (3 * Math.PI / 2) + extendedLeftAngle;
+    const rightFoulAngleClipping = (3 * Math.PI / 2) + extendedRightAngle;
+    
+    // Clip to include all balls but remove deadspace
+    // Use extended angles to include foul territory
+    newCtx.save();
+    
+    // Use a clipping rectangle that accounts for the full field width including foul territory
+    // Calculate the actual width needed at the stadium line including foul territory
+    const stadiumLineWidth = stadiumDistance * actualScale * Math.sin(standardFoulAngle) * 2;
+    const neededWidth = Math.max(stadiumLineWidth, canvasWidth * 0.8); // Ensure at least 80% of canvas width
+    const clipPaddingX = Math.max(0, (canvasWidth - neededWidth) / 2);
+    const clipPaddingY = 5; // Minimal vertical padding
+    newCtx.beginPath();
+    newCtx.rect(clipPaddingX, clipPaddingY, canvasWidth - clipPaddingX * 2, canvasHeight - clipPaddingY * 2);
+    newCtx.clip();
+    
+    // Draw field outline (pass scale and coordinate info for accurate foul lines)
+    drawField(newCtx, canvasWidth, actualScale, actualCenterX, actualCenterY, statcastHomeX, statcastHomeY, fenceDistance, stadiumDistance);
+    
+    // Draw batted balls
+    sprayData.forEach(point => {
+        drawBattedBall(newCtx, point, canvasWidth, actualScale, actualCenterX, actualCenterY, statcastHomeX, statcastHomeY);
+    });
+    
+    newCtx.restore(); // Remove clipping
+    
+    // Update info with summary
+    updateSprayChartSummary(info, data);
+    setSpraychartPlaceholderVisible(false);
+    
+    // Set up mouse event handlers
+    canvas.addEventListener('mousemove', handleSprayChartMouseMove);
+    canvas.addEventListener('mouseleave', handleSprayChartMouseLeave);
+}
+
+function drawField(ctx, size, scale, centerX, centerY, statcastHomeX, statcastHomeY, fenceDistance, stadiumDistance) {
+    ctx.save();
+    
+    // Use fixed Statcast unit distances for consistent field appearance
+    // Standard baseball field dimensions:
+    // - Base distance: 90 feet ≈ 45 Statcast units
+    // - Pitcher's mound: 60.5 feet ≈ 30 Statcast units  
+    // - Infield dirt arc: 95 feet ≈ 47.5 Statcast units
+    // - Grass diamond extends to bases: 90 feet ≈ 45 Statcast units
+    
+    const safeScale = Math.max(0.1, scale);
+    const safeStadiumDistance = Math.max(10, stadiumDistance);
+    const safeFenceDistance = Math.max(10, fenceDistance);
+    
+    // Fixed field dimensions in Statcast units (always the same)
+    const BASE_DISTANCE = 45; // 90 feet = 45 Statcast units
+    const PITCHER_MOUND_DISTANCE = 30; // 60.5 feet ≈ 30 Statcast units
+    const INFIELD_DIRT_DISTANCE = 65; // 130 feet - longer infield dirt area
+    const GRASS_DIAMOND_DISTANCE = 45; // 90 feet = 45 Statcast units (to bases)
+    
+    // Calculate foul line angles - used for both dirt and foul lines
+    const foulLineAngle = Math.PI / 4; // 45 degrees
+    const leftFoulAngle = (3 * Math.PI / 2) - foulLineAngle; // 225° = 5π/4 (left field)
+    const rightFoulAngle = (3 * Math.PI / 2) + foulLineAngle; // 315° = 7π/4 (right field)
+    
+    // Draw outfield grass (uniform green) - extend to stadium line
+    // Use same color as canvas background for uniform appearance
+    const outfieldRadius = safeStadiumDistance * safeScale;
+    ctx.fillStyle = '#0a2810'; // Uniform dark green for all outfield grass (matches canvas background)
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.arc(centerX, centerY, outfieldRadius, leftFoulAngle, rightFoulAngle, false);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Helper function to calculate distance at a given angle (creates smooth oval shape)
+    // This creates the same oval shape used for homerun and stadium lines
+    function getOvalDistance(baseDistance, angle) {
+        // angle is from vertical (0 = center field, 45 = foul line)
+        // Use cosine interpolation for smooth oval curve - less deep, more oval
+        const angleFromCenter = Math.abs(angle);
+        const maxAngle = Math.PI / 4; // 45 degrees at foul line
+        // Normalize angle to 0-1 range
+        const normalizedAngle = angleFromCenter / maxAngle;
+        // Use cosine curve for smooth elliptical shape - 10% deeper at center (less deep than before)
+        // At center (normalizedAngle=0): cos(0) = 1, so depth = 1.1
+        // At foul (normalizedAngle=1): cos(PI/2) = 0, so depth = 1.0
+        const depthMultiplier = 1.0 + Math.cos(normalizedAngle * Math.PI / 2) * 0.1;
+        return baseDistance * depthMultiplier;
+    }
+    
+    // Draw infield dirt (brown) - only in fair territory (between foul lines)
+    // Entire infield is dirt, using same oval shape as homerun and stadium lines
+    const numPoints = 100; // More points for perfectly smooth oval curve
+    ctx.fillStyle = '#8B4513';
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY); // Start at home plate
+    // Draw oval curve from left foul line to right foul line
+    for (let i = 0; i <= numPoints; i++) {
+        const t = i / numPoints;
+        // Interpolate angle from leftFoulAngle to rightFoulAngle
+        const canvasAngle = leftFoulAngle + (rightFoulAngle - leftFoulAngle) * t;
+        const angleFromVertical = canvasAngle - (3 * Math.PI / 2); // Convert to angle from vertical
+        const distance = getOvalDistance(INFIELD_DIRT_DISTANCE, Math.abs(angleFromVertical)) * safeScale;
+        const x = centerX + Math.cos(canvasAngle) * distance;
+        const y = centerY + Math.sin(canvasAngle) * distance;
+        ctx.lineTo(x, y);
+    }
+    ctx.closePath(); // Close back to home plate
+    ctx.fill();
+    
+    // Calculate foul line endpoints using stadium distance
+    const foulLineDistance = safeStadiumDistance * safeScale;
+    
+    // Draw foul lines - calculate based on actual field angles
+    // Foul lines extend from home plate at approximately 45 degrees
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 3;
+    
+    // Left foul line - calculate endpoint using the angle
+    const leftFoulX = centerX + Math.cos(leftFoulAngle) * foulLineDistance;
+    const leftFoulY = centerY + Math.sin(leftFoulAngle) * foulLineDistance;
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(leftFoulX, leftFoulY);
+    ctx.stroke();
+    
+    // Right foul line
+    const rightFoulX = centerX + Math.cos(rightFoulAngle) * foulLineDistance;
+    const rightFoulY = centerY + Math.sin(rightFoulAngle) * foulLineDistance;
+    ctx.beginPath();
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(rightFoulX, rightFoulY);
+    ctx.stroke();
+    
+    // Draw stadium line (dashed white line) - deeper in center, same on corners
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    // Draw curve from left foul line to right foul line (numPoints already declared above)
+    for (let i = 0; i <= numPoints; i++) {
+        const t = i / numPoints;
+        // Interpolate angle from leftFoulAngle to rightFoulAngle
+        // Convert canvas angle to angle from vertical (center field)
+        const canvasAngle = leftFoulAngle + (rightFoulAngle - leftFoulAngle) * t;
+        const angleFromVertical = canvasAngle - (3 * Math.PI / 2); // Convert to angle from vertical
+        const distance = getOvalDistance(safeStadiumDistance, Math.abs(angleFromVertical)) * safeScale;
+        const x = centerX + Math.cos(canvasAngle) * distance;
+        const y = centerY + Math.sin(canvasAngle) * distance;
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]); // Reset dash pattern
+    
+    // Draw fence line (homerun line - solid yellow) - deeper in center, same on corners
+    ctx.strokeStyle = 'var(--color-text-primary)f00';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    // Draw curve from left foul line to right foul line
+    for (let i = 0; i <= numPoints; i++) {
+        const t = i / numPoints;
+        // Interpolate angle from leftFoulAngle to rightFoulAngle
+        const canvasAngle = leftFoulAngle + (rightFoulAngle - leftFoulAngle) * t;
+        const angleFromVertical = canvasAngle - (3 * Math.PI / 2); // Convert to angle from vertical
+        const distance = getOvalDistance(safeFenceDistance, Math.abs(angleFromVertical)) * safeScale;
+        const x = centerX + Math.cos(canvasAngle) * distance;
+        const y = centerY + Math.sin(canvasAngle) * distance;
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+    
+    // Draw base paths using fixed dimensions
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 2;
+    const baseDistance = BASE_DISTANCE * safeScale; // Use fixed base distance
+    const baseSize = 8; // Fixed base size in pixels
+    
+    // Calculate base positions (90 feet = 45 Statcast units)
+    // Bases form a square: first base is 45° to right, third is 45° to left, second is straight up
+    // First base: 45° to the right (315° in canvas coordinates)
+    const firstBaseX = centerX + baseDistance * 0.707; // cos(45°) = 0.707
+    const firstBaseY = centerY - baseDistance * 0.707; // sin(45°) = 0.707
+    
+    // Second base: straight up from home, forming a square with the bases
+    // Distance from home to second is the diagonal: baseDistance * sqrt(2)
+    const secondBaseX = centerX;
+    const secondBaseY = centerY - baseDistance * 1.414; // sqrt(2) ≈ 1.414
+    
+    // Third base: 45° to the left (225° in canvas coordinates)
+    const thirdBaseX = centerX - baseDistance * 0.707;
+    const thirdBaseY = centerY - baseDistance * 0.707;
+    
+    // Draw base paths (white lines connecting bases)
+    ctx.beginPath();
+    // Home to first
+    ctx.moveTo(centerX, centerY);
+    ctx.lineTo(firstBaseX, firstBaseY);
+    // First to second
+    ctx.lineTo(secondBaseX, secondBaseY);
+    // Second to third
+    ctx.lineTo(thirdBaseX, thirdBaseY);
+    // Third to home
+    ctx.lineTo(centerX, centerY);
+    ctx.stroke();
+    
+    // Draw bases (white squares)
+    ctx.fillStyle = 'var(--color-text-primary)';
+    // First base
+    ctx.fillRect(firstBaseX - baseSize/2, firstBaseY - baseSize/2, baseSize, baseSize);
+    ctx.strokeRect(firstBaseX - baseSize/2, firstBaseY - baseSize/2, baseSize, baseSize);
+    // Second base
+    ctx.fillRect(secondBaseX - baseSize/2, secondBaseY - baseSize/2, baseSize, baseSize);
+    ctx.strokeRect(secondBaseX - baseSize/2, secondBaseY - baseSize/2, baseSize, baseSize);
+    // Third base
+    ctx.fillRect(thirdBaseX - baseSize/2, thirdBaseY - baseSize/2, baseSize, baseSize);
+    ctx.strokeRect(thirdBaseX - baseSize/2, thirdBaseY - baseSize/2, baseSize, baseSize);
+    
+    // Draw pitcher's mound (brown circle in center of infield)
+    ctx.fillStyle = '#8B4513';
+    const moundDistance = PITCHER_MOUND_DISTANCE * safeScale; // Use fixed mound distance
+    const moundRadius = 6; // Fixed mound radius in pixels
+    ctx.beginPath();
+    ctx.arc(centerX, centerY - moundDistance, moundRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    
+    // Draw home plate (white pentagon shape) - point facing down toward batter
+    // Home plate point should face away from the field (down on canvas, toward batter)
+    ctx.fillStyle = 'var(--color-text-primary)';
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 2;
+    const plateSize = 10;
+    const plateDepth = 6;
+    ctx.beginPath();
+    // Start at the point (facing down, toward batter)
+    ctx.moveTo(centerX, centerY + plateDepth + plateSize / 4);
+    // Draw to left corner
+    ctx.lineTo(centerX - plateSize / 4, centerY + plateDepth);
+    // Draw to left edge
+    ctx.lineTo(centerX - plateSize / 2, centerY);
+    // Draw to right edge
+    ctx.lineTo(centerX + plateSize / 2, centerY);
+    // Draw to right corner
+    ctx.lineTo(centerX + plateSize / 4, centerY + plateDepth);
+    // Close back to point
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    
+    ctx.restore();
+}
+
+function drawBattedBall(ctx, point, size, scale, centerX, centerY, statcastHomeX, statcastHomeY) {
+    // Calculate relative position from home plate
+    // In Statcast: hc_x increases toward right field, hc_y DECREASES as distance increases
+    // Home plate is at (125.42, 198.27)
+    // So: distance = 198.27 - hc_y (as hc_y gets smaller, distance increases)
+    const deltaX = point.x - statcastHomeX;  // Positive = right field, Negative = left field
+    const distance = statcastHomeY - point.y;  // As hc_y decreases, distance increases (toward center field)
+    
+    // Calculate angle from home plate
+    // Using atan2 to get proper angle, then convert to direction
+    const angle = Math.atan2(deltaX, distance); // Angle from home plate
+    
+    // Convert polar coordinates to canvas coordinates
+    // Home plate is at bottom center, center field is at top
+    const canvasX = centerX + (deltaX * scale);
+    const canvasY = centerY - (distance * scale); // Distance increases toward center field (up on canvas)
+    
+    // Only draw if within reasonable canvas bounds (with some margin)
+    const margin = 50;
+    if (canvasX < -margin || canvasX > size + margin || canvasY < -margin || canvasY > size + margin) {
+        return;
+    }
+    
+    // Get color based on event type
+    const color = EVENT_COLORS[point.event] || EVENT_COLORS['default'];
+    
+    // Size based on launch speed (if available)
+    let radius = 4;
+    if (point.launch_speed !== null && point.launch_speed !== undefined) {
+        radius = Math.max(3, Math.min(8, point.launch_speed / 15));
+    }
+    
+    // Draw the point
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    ctx.arc(canvasX, canvasY, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+    
+    // Store canvas coordinates for mouse interaction
+    point.canvasX = canvasX;
+    point.canvasY = canvasY;
+    point.radius = radius;
+}
+
+function handleSprayChartMouseMove(event) {
+    if (!sprayChartData || !sprayChartData.data) return;
+    
+    const canvas = document.getElementById('spraychartCanvas');
+    if (!canvas) return;
+    
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // Find the closest point
+    let closestPoint = null;
+    let minDistance = Infinity;
+    
+    sprayChartData.data.forEach(point => {
+        if (point.canvasX === undefined || point.canvasY === undefined) return;
+        
+        const dx = x - point.canvasX;
+        const dy = y - point.canvasY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < point.radius + 5 && distance < minDistance) {
+            minDistance = distance;
+            closestPoint = point;
+        }
+    });
+    
+    if (closestPoint) {
+        updateSprayChartTooltip(event, closestPoint);
+    } else {
+        hideSprayChartTooltip();
+    }
+}
+
+function handleSprayChartMouseLeave() {
+    hideSprayChartTooltip();
+}
+
+function updateSprayChartTooltip(event, point) {
+    const tooltip = document.getElementById('spraychartTooltip');
+    const canvas = document.getElementById('spraychartCanvas');
+    if (!tooltip || !canvas) return;
+    
+    const eventName = point.event.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+    
+    let tooltipHTML = `
+        <div class="spraychart-tooltip-title">${eventName}</div>
+    `;
+    
+    if (point.launch_speed !== null && point.launch_speed !== undefined) {
+        tooltipHTML += `<div class="spraychart-tooltip-metric">Exit Velocity: ${point.launch_speed.toFixed(1)} mph</div>`;
+    }
+    
+    if (point.launch_angle !== null && point.launch_angle !== undefined) {
+        tooltipHTML += `<div class="spraychart-tooltip-metric">Launch Angle: ${point.launch_angle.toFixed(1)}°</div>`;
+    }
+    
+    if (point.hit_distance !== null && point.hit_distance !== undefined) {
+        tooltipHTML += `<div class="spraychart-tooltip-metric">Distance: ${point.hit_distance.toFixed(0)} ft</div>`;
+    }
+    
+    tooltip.innerHTML = tooltipHTML;
+    
+    const wrapperRect = canvas.parentElement.getBoundingClientRect();
+    const tooltipX = event.clientX - wrapperRect.left;
+    const tooltipY = event.clientY - wrapperRect.top - 24;
+    tooltip.style.left = `${tooltipX}px`;
+    tooltip.style.top = `${tooltipY}px`;
+    tooltip.style.display = 'block';
+    requestAnimationFrame(() => tooltip.classList.add('visible'));
+}
+
+function hideSprayChartTooltip() {
+    const tooltip = document.getElementById('spraychartTooltip');
+    if (!tooltip) return;
+    tooltip.classList.remove('visible');
+    tooltip.style.display = 'none';
+}
+
+function updateSprayChartSummary(infoElement, data) {
+    const summary = data.summary || {};
+    const eventCounts = summary.event_counts || {};
+    
+    const cards = [
+        { label: 'Total Batted Balls', value: formatCount(summary.total_batted_balls || 0) },
+        { label: 'Avg Exit Velocity', value: summary.avg_launch_speed ? summary.avg_launch_speed.toFixed(1) + ' mph' : 'N/A' },
+        { label: 'Avg Launch Angle', value: summary.avg_launch_angle ? summary.avg_launch_angle.toFixed(1) + '°' : 'N/A' },
+    ];
+    
+    // Add event counts
+    Object.entries(eventCounts).forEach(([event, count]) => {
+        const eventName = event.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+        cards.push({ label: eventName, value: formatCount(count) });
+    });
+    
+    infoElement.innerHTML = `
+        <div class="spraychart-summary">
+            ${cards.map(card => `
+                <div class="spraychart-summary-card">
+                    <div class="spraychart-summary-label">${card.label}</div>
+                    <div class="spraychart-summary-value">${card.value}</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function formatCount(value) {
+    if (value === null || value === undefined) {
+        return '--';
+    }
+    const num = Number(value);
+    if (Number.isNaN(num)) {
+        return String(value);
+    }
+    return num.toLocaleString('en-US');
+}
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+    font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--color-text-primary);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-page-bg) 85%, white), var(--color-page-bg));
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.back-button:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.spraychart-controls {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    padding: 1.5rem;
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-floating);
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 150px;
+}
+
+.control-group-full {
+    width: 100%;
+    min-width: 100%;
+}
+
+.player-search-container {
+    position: relative;
+    width: 100%;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    margin-top: 2px;
+}
+
+.player-dropdown-item {
+    padding: 0.75rem 1rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background 0.2s ease;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 80%, var(--color-main-bg));
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+}
+
+.player-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+}
+
+.selected-player-display span {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.clear-player-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    color: var(--color-accent);
+}
+
+.control-label {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.control-select,
+.control-input {
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+}
+
+.control-select:focus,
+.control-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.generate-btn {
+    padding: 0.75rem 2rem;
+    background: var(--color-accent);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    color: var(--color-main-bg);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.generate-btn:hover {
+    background: var(--color-accent-bright);
+    border-color: var(--color-accent-bright);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.3);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--color-border);
+    border-color: var(--color-border);
+}
+
+.generate-btn.disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.spraychart-container {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 18px;
+    padding: 2rem;
+    box-shadow: var(--shadow-elevated);
+    backdrop-filter: blur(10px);
+}
+
+.spraychart-wrapper {
+    width: 100%;
+    min-height: 500px;
+    position: relative;
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: var(--color-layer-soft);
+    border-radius: 16px;
+    border: 1px solid var(--color-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+#spraychartCanvas {
+    max-width: 100%;
+    border-radius: 12px;
+}
+
+.spraychart-info {
+    padding: 1.25rem 1.5rem;
+    background: var(--color-layer-soft);
+    border-radius: 12px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-floating);
+}
+
+.spraychart-info p {
+    color: var(--color-text-muted);
+    margin: 0;
+    text-align: center;
+    font-size: 0.95rem;
+}
+
+.spraychart-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+}
+
+.spraychart-summary-card {
+    background: color-mix(in srgb, var(--color-layer-card) 90%, var(--color-page-bg));
+    border: 1px solid var(--color-layer-border);
+    border-radius: 10px;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.spraychart-summary-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.58);
+}
+
+.spraychart-summary-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--color-text-primary) 85%, white);
+}
+
+.spraychart-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--color-layer-card) 85%, white);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    color: var(--color-text-primary);
+    font-size: 0.85rem;
+    line-height: 1.3;
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.25);
+    transform: translate(-50%, -50%) scale(0.98);
+    opacity: 0;
+    transition: opacity 120ms ease, transform 150ms ease;
+    z-index: 10;
+    min-width: 180px;
+}
+
+.spraychart-tooltip.visible {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.spraychart-tooltip-title {
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 0.35rem;
+}
+
+.spraychart-tooltip-metric {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+
+    .header-content {
+        flex-direction: column;
+    }
+
+    .spraychart-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-group {
+        min-width: 100%;
+    }
+
+    .generate-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+{% endblock %}
+

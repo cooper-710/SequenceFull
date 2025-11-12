@@ -1,0 +1,1230 @@
+{% extends "base.html" %}
+
+{% block title %}Pitch Arsenal Effectiveness - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Pitch Arsenal Effectiveness</h1>
+                <p class="page-subtitle">Multi-dimensional pitch effectiveness dashboard showing run value heatmaps by zone, whiff rate zones, ground ball rates, and putaway percentages for each pitch type</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="effectiveness-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Pitcher Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="pitcherSearch" 
+                        class="control-input" 
+                        placeholder="Type to search pitchers..."
+                        autocomplete="off"
+                    >
+                    <div id="pitcherSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedPitcherDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedPitcherName"></span>
+                    <button id="clearPitcher" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Batter Handedness</label>
+                <select id="batterHandSelect" class="control-select">
+                    <option value="">All</option>
+                    <option value="R">Right-Handed</option>
+                    <option value="L">Left-Handed</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Count Filter</label>
+                <select id="countFilterSelect" class="control-select">
+                    <option value="">All Counts</option>
+                    <option value="2-strikes">2-Strike Counts</option>
+                    <option value="0-0">0-0</option>
+                    <option value="0-1">0-1</option>
+                    <option value="1-0">1-0</option>
+                    <option value="1-1">1-1</option>
+                    <option value="2-0">2-0</option>
+                    <option value="2-1">2-1</option>
+                    <option value="1-2">1-2</option>
+                    <option value="2-2">2-2</option>
+                    <option value="3-0">3-0</option>
+                    <option value="3-1">3-1</option>
+                    <option value="3-2">3-2</option>
+                    <option value="0-2">0-2</option>
+                </select>
+            </div>
+
+            <button id="generateAnalysis" class="generate-btn" type="button">
+                <i class="fas fa-chart-line"></i> Generate Analysis
+            </button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading pitch effectiveness data...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error-message" style="display: none;">
+            <i class="fas fa-exclamation-circle"></i>
+            <span id="errorText"></span>
+        </div>
+
+        <!-- Main Analysis Content -->
+        <div id="analysisContent" class="analysis-content" style="display: none;">
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <h2 id="pitcherTitle"></h2>
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Pitches</div>
+                        <div class="stat-value" id="totalPitches">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Pitcher Hand</div>
+                        <div class="stat-value" id="pitcherHand">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Season</div>
+                        <div class="stat-value" id="seasonDisplay">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Pitch Types</div>
+                        <div class="stat-value" id="pitchTypeCount">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="tab-navigation">
+                <button class="tab-btn active" data-tab="run-value">Run Value Heatmaps</button>
+                <button class="tab-btn" data-tab="whiff-rate">Whiff Rate Zones</button>
+                <button class="tab-btn" data-tab="ground-ball">Ground Ball Rates</button>
+                <button class="tab-btn" data-tab="putaway">Putaway Percentages</button>
+                <button class="tab-btn" data-tab="summary">Summary Table</button>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                <!-- Run Value Heatmaps Tab -->
+                <div id="tab-run-value" class="tab-pane active">
+                    <div class="heatmap-section">
+                        <div class="section-header">
+                            <h3>Run Value Heatmaps by Zone</h3>
+                            <p class="section-description">Run value per pitch by location. Positive values (red) favor the pitcher, negative values (blue) favor the batter.</p>
+                        </div>
+                        <div id="runValueHeatmaps" class="heatmaps-grid"></div>
+                    </div>
+                </div>
+
+                <!-- Whiff Rate Zones Tab -->
+                <div id="tab-whiff-rate" class="tab-pane">
+                    <div class="heatmap-section">
+                        <div class="section-header">
+                            <h3>Whiff Rate Zones</h3>
+                            <p class="section-description">Percentage of swings that result in whiffs (swinging strikes) by pitch location.</p>
+                        </div>
+                        <div id="whiffRateHeatmaps" class="heatmaps-grid"></div>
+                    </div>
+                </div>
+
+                <!-- Ground Ball Rates Tab -->
+                <div id="tab-ground-ball" class="tab-pane">
+                    <div class="heatmap-section">
+                        <div class="section-header">
+                            <h3>Ground Ball Rates by Zone</h3>
+                            <p class="section-description">Percentage of batted balls that result in ground balls (launch angle < 10°) by pitch location.</p>
+                        </div>
+                        <div id="groundBallHeatmaps" class="heatmaps-grid"></div>
+                    </div>
+                </div>
+
+                <!-- Putaway Percentages Tab -->
+                <div id="tab-putaway" class="tab-pane">
+                    <div class="putaway-section">
+                        <div class="section-header">
+                            <h3>Putaway Percentages</h3>
+                            <p class="section-description">Percentage of strikeouts (K) on 2-strike counts for each pitch type.</p>
+                        </div>
+                        <div class="putaway-charts-container">
+                            <div class="putaway-chart-wrapper">
+                                <canvas id="putawayChart"></canvas>
+                            </div>
+                            <div class="putaway-table-container">
+                                <table id="putawayTable" class="effectiveness-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Pitch Type</th>
+                                            <th>2-Strike Pitches</th>
+                                            <th>Strikeouts</th>
+                                            <th>Putaway %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Summary Table Tab -->
+                <div id="tab-summary" class="tab-pane">
+                    <div class="summary-table-section">
+                        <div class="section-header">
+                            <h3>Pitch Arsenal Effectiveness Summary</h3>
+                            <p class="section-description">Comprehensive effectiveness metrics for each pitch type.</p>
+                        </div>
+                        <div class="table-container">
+                            <table id="summaryTable" class="effectiveness-table">
+                                <thead>
+                                    <tr>
+                                        <th>Pitch Type</th>
+                                        <th>Usage %</th>
+                                        <th>Avg Run Value</th>
+                                        <th>Whiff Rate</th>
+                                        <th>Ground Ball %</th>
+                                        <th>Putaway %</th>
+                                        <th>Strike Rate</th>
+                                        <th>xwOBA</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.8.5/dist/d3.min.js"></script>
+<script>
+// Pitch type colors
+const PITCH_COLORS = {
+    "FF": "#FF0000", "FT": "#8B0000", "SI": "#FFA500", "FC": "#808080",
+    "SL": "var(--color-main-bg)0FF", "CU": "#800080", "CH": "#008000", "FS": "#00FFFF",
+    "KC": "#4B0082", "KN": "#D3D3D3", "ST": "#008080", "SV": "#4682B4",
+    "PO": "#A52A2A", "IN": "#F0E68C", "UN": "#B0C4DE", "CS": "#800000"
+};
+
+// Pitch type labels
+const PITCH_LABELS = {
+    "FF": "Four-Seam", "FT": "Two-Seam", "SI": "Sinker", "FC": "Cutter",
+    "SL": "Slider", "CU": "Curveball", "CH": "Changeup", "FS": "Splitter",
+    "KC": "Knuckle Curve", "KN": "Knuckleball", "ST": "Sweeper", "SV": "Slurve"
+};
+
+let selectedPitcher = null;
+let analysisData = null;
+let charts = {};
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadFilterOptions();
+    setupPitcherSearch();
+    
+    document.getElementById('generateAnalysis').addEventListener('click', function() {
+        if (!selectedPitcher) {
+            alert('Please select a pitcher first');
+            return;
+        }
+        generateAnalysis();
+    });
+
+    document.getElementById('clearPitcher').addEventListener('click', function() {
+        clearPitcherSelection();
+    });
+
+    // Tab navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const tabName = this.dataset.tab;
+            switchTab(tabName);
+        });
+    });
+});
+
+async function loadFilterOptions() {
+    const currentYear = new Date().getFullYear();
+    const seasonSelect = document.getElementById('seasonSelect');
+    for (let year = currentYear; year >= 2015; year--) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        seasonSelect.appendChild(option);
+    }
+}
+
+function setupPitcherSearch() {
+    const searchInput = document.getElementById('pitcherSearch');
+    const dropdown = document.getElementById('pitcherSearchDropdown');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        searchTimeout = setTimeout(async () => {
+            try {
+                const response = await fetch(`/api/csv/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.players && data.players.length > 0) {
+                    dropdown.innerHTML = '';
+                    data.players.slice(0, 10).forEach(player => {
+                        const item = document.createElement('div');
+                        item.className = 'player-dropdown-item';
+                        item.textContent = player.name || player;
+                        item.addEventListener('click', function() {
+                            selectPitcher(player.name || player);
+                            dropdown.style.display = 'none';
+                            searchInput.value = '';
+                        });
+                        dropdown.appendChild(item);
+                    });
+                    dropdown.style.display = 'block';
+                } else {
+                    dropdown.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error searching pitchers:', error);
+            }
+        }, 300);
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+function selectPitcher(name) {
+    selectedPitcher = name;
+    const searchInput = document.getElementById('pitcherSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('pitcherSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    document.getElementById('selectedPitcherName').textContent = name;
+    document.getElementById('selectedPitcherDisplay').style.display = 'flex';
+    document.getElementById('generateAnalysis').classList.remove('disabled');
+    loadPitcherSeasons(name);
+}
+
+function clearPitcherSelection() {
+    selectedPitcher = null;
+    document.getElementById('selectedPitcherDisplay').style.display = 'none';
+    document.getElementById('generateAnalysis').classList.add('disabled');
+    document.getElementById('analysisContent').style.display = 'none';
+    document.getElementById('seasonSelect').innerHTML = '<option value="">All Seasons</option>';
+}
+
+async function loadPitcherSeasons(pitcherName) {
+    try {
+        const response = await fetch(`/api/pitcher/${encodeURIComponent(pitcherName)}/seasons`);
+        const data = await response.json();
+        
+        const seasonSelect = document.getElementById('seasonSelect');
+        seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+        
+        if (data.seasons && data.seasons.length > 0) {
+            data.seasons.forEach(season => {
+                const option = document.createElement('option');
+                option.value = season;
+                option.textContent = season;
+                seasonSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading seasons:', error);
+    }
+}
+
+async function generateAnalysis() {
+    const season = document.getElementById('seasonSelect').value;
+    const batterHand = document.getElementById('batterHandSelect').value;
+    const countFilter = document.getElementById('countFilterSelect').value;
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    const analysisContent = document.getElementById('analysisContent');
+    
+    errorMessage.style.display = 'none';
+    analysisContent.style.display = 'none';
+    loadingIndicator.style.display = 'flex';
+    
+    try {
+        let url = `/api/visuals/pitch-arsenal-effectiveness?pitcher=${encodeURIComponent(selectedPitcher)}`;
+        if (season) {
+            url += `&season=${season}`;
+        }
+        if (batterHand) {
+            url += `&batter_hand=${batterHand}`;
+        }
+        if (countFilter) {
+            url += `&count_filter=${countFilter}`;
+        }
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        analysisData = data;
+        displayAnalysis(data);
+        loadingIndicator.style.display = 'none';
+        analysisContent.style.display = 'block';
+    } catch (error) {
+        loadingIndicator.style.display = 'none';
+        errorMessage.style.display = 'flex';
+        document.getElementById('errorText').textContent = error.message;
+        console.error('Error generating analysis:', error);
+    }
+}
+
+function displayAnalysis(data) {
+    document.getElementById('pitcherTitle').textContent = data.pitcher;
+    document.getElementById('totalPitches').textContent = data.total_pitches.toLocaleString();
+    document.getElementById('pitcherHand').textContent = data.pitcher_hand === 'R' ? 'Right' : 'Left';
+    document.getElementById('seasonDisplay').textContent = data.season || 'All Seasons';
+    document.getElementById('pitchTypeCount').textContent = data.pitch_types ? data.pitch_types.length : '-';
+    
+    displayRunValueHeatmaps(data.run_value_heatmaps);
+    displayWhiffRateHeatmaps(data.whiff_rate_heatmaps);
+    displayGroundBallHeatmaps(data.ground_ball_heatmaps);
+    displayPutawayChart(data.putaway_data);
+    displaySummaryTable(data.summary);
+}
+
+function displayRunValueHeatmaps(heatmaps) {
+    const container = document.getElementById('runValueHeatmaps');
+    container.innerHTML = '';
+    
+    if (!heatmaps || Object.keys(heatmaps).length === 0) {
+        container.innerHTML = '<p class="no-data">No run value data available</p>';
+        return;
+    }
+    
+    Object.entries(heatmaps).forEach(([pitchType, data]) => {
+        const card = createHeatmapCard(pitchType, data, 'Run Value', 'RdYlBu_r', [-0.5, 0.5]);
+        container.appendChild(card);
+    });
+}
+
+function displayWhiffRateHeatmaps(heatmaps) {
+    const container = document.getElementById('whiffRateHeatmaps');
+    container.innerHTML = '';
+    
+    if (!heatmaps || Object.keys(heatmaps).length === 0) {
+        container.innerHTML = '<p class="no-data">No whiff rate data available</p>';
+        return;
+    }
+    
+    Object.entries(heatmaps).forEach(([pitchType, data]) => {
+        const card = createHeatmapCard(pitchType, data, 'Whiff Rate (%)', 'YlOrRd', [0, 100]);
+        container.appendChild(card);
+    });
+}
+
+function displayGroundBallHeatmaps(heatmaps) {
+    const container = document.getElementById('groundBallHeatmaps');
+    container.innerHTML = '';
+    
+    if (!heatmaps || Object.keys(heatmaps).length === 0) {
+        container.innerHTML = '<p class="no-data">No ground ball data available</p>';
+        return;
+    }
+    
+    Object.entries(heatmaps).forEach(([pitchType, data]) => {
+        const card = createHeatmapCard(pitchType, data, 'Ground Ball %', 'Greens', [0, 100]);
+        container.appendChild(card);
+    });
+}
+
+function createHeatmapCard(pitchType, data, title, colorScheme, valueRange) {
+    const card = document.createElement('div');
+    card.className = 'heatmap-card';
+    card.innerHTML = `
+        <div class="heatmap-header">
+            <h4>${PITCH_LABELS[pitchType] || pitchType}</h4>
+            <span class="pitch-color-indicator" style="background-color: ${PITCH_COLORS[pitchType] || '#999'}"></span>
+        </div>
+        <div class="heatmap-container">
+            <canvas class="heatmap-canvas" data-pitch="${pitchType}" data-metric="${title}"></canvas>
+        </div>
+    `;
+    
+    // Render heatmap using canvas
+    setTimeout(() => {
+        const canvas = card.querySelector('.heatmap-canvas');
+        renderHeatmap(canvas, data, title, colorScheme, valueRange);
+    }, 100);
+    
+    return card;
+}
+
+function renderHeatmap(canvas, data, title, colorScheme, valueRange) {
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width = 600;
+    const height = canvas.height = 600;
+    
+    // Define strike zone bounds (plate coordinates in feet)
+    const plateLeft = -0.85;
+    const plateRight = 0.85;
+    const plateBottom = 1.5;
+    const plateTop = 3.5;
+    
+    // Map to canvas coordinates (x: -2 to 2 feet, z: 0 to 4 feet)
+    const xMin = -2;
+    const xMax = 2;
+    const zMin = 0;
+    const zMax = 4;
+    
+    function xToCanvas(x) {
+        return ((x - xMin) / (xMax - xMin)) * width;
+    }
+    
+    function zToCanvas(z) {
+        return ((zMax - z) / (zMax - zMin)) * height;
+    }
+    
+    // Clear canvas
+    ctx.fillStyle = 'var(--color-surface)';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Draw heatmap cells as circles
+    if (data && data.zones && data.zones.length > 0) {
+        // Find min/max values for normalization
+        const values = data.zones.map(z => z.value);
+        const actualMin = Math.min(...values);
+        const actualMax = Math.max(...values);
+        const range = actualMax - actualMin || 1;
+        
+        data.zones.forEach(zone => {
+            const x = xToCanvas(zone.x);
+            const y = zToCanvas(zone.z);
+            
+            // Normalize value to 0-1 range
+            let normalizedValue = (zone.value - actualMin) / range;
+            if (colorScheme === 'RdYlBu_r') {
+                // For run value, center around 0
+                normalizedValue = (zone.value - valueRange[0]) / (valueRange[1] - valueRange[0]);
+            } else {
+                normalizedValue = (zone.value - valueRange[0]) / (valueRange[1] - valueRange[0]);
+            }
+            
+            normalizedValue = Math.max(0, Math.min(1, normalizedValue));
+            
+            // Calculate color based on value
+            const color = getColorForValue(normalizedValue, colorScheme);
+            
+            // Calculate radius based on sample size (optional)
+            const radius = 25 + Math.min(15, zone.samples / 10);
+            
+            // Draw circle with gradient
+            const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius);
+            gradient.addColorStop(0, color);
+            gradient.addColorStop(1, color + '80'); // 50% opacity at edge
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+    
+    // Draw strike zone outline
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.rect(
+        xToCanvas(plateLeft),
+        zToCanvas(plateTop),
+        xToCanvas(plateRight) - xToCanvas(plateLeft),
+        zToCanvas(plateBottom) - zToCanvas(plateTop)
+    );
+    ctx.stroke();
+    
+    // Draw plate
+    ctx.strokeStyle = 'var(--color-text-subtle)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(xToCanvas(0), zToCanvas(0));
+    ctx.lineTo(xToCanvas(plateLeft), zToCanvas(0));
+    ctx.lineTo(xToCanvas(plateRight), zToCanvas(0));
+    ctx.lineTo(xToCanvas(0), zToCanvas(0));
+    ctx.stroke();
+}
+
+function getColorForValue(value, scheme) {
+    value = Math.max(0, Math.min(1, value));
+    
+    if (scheme === 'RdYlBu_r') {
+        // Red-Yellow-Blue reversed (red = high positive run value, blue = low/negative)
+        // Center around 0.5 (neutral)
+        if (value < 0.5) {
+            // Blue to white (negative to neutral)
+            const t = value * 2;
+            const r = Math.floor(t * 255);
+            const g = Math.floor(100 + t * 155);
+            const b = Math.floor(200 + t * 55);
+            return `rgb(${r}, ${g}, ${b})`;
+        } else {
+            // White to red (neutral to positive)
+            const t = (value - 0.5) * 2;
+            const r = Math.floor(255);
+            const g = Math.floor(255 - t * 200);
+            const b = Math.floor(255 - t * 255);
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+    } else if (scheme === 'YlOrRd') {
+        // Yellow-Orange-Red (for whiff rates)
+        if (value < 0.33) {
+            const t = value * 3;
+            const r = Math.floor(255);
+            const g = Math.floor(255);
+            const b = Math.floor(200 - t * 200);
+            return `rgb(${r}, ${g}, ${b})`;
+        } else if (value < 0.67) {
+            const t = (value - 0.33) * 3;
+            const r = Math.floor(255);
+            const g = Math.floor(255 - t * 100);
+            const b = 0;
+            return `rgb(${r}, ${g}, ${b})`;
+        } else {
+            const t = (value - 0.67) * 3;
+            const r = Math.floor(255);
+            const g = Math.floor(155 - t * 155);
+            const b = 0;
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+    } else if (scheme === 'Greens') {
+        // Green scale (for ground ball rates)
+        const g = Math.floor(50 + value * 205);
+        const b = Math.floor(0);
+        return `rgb(0, ${g}, ${b})`;
+    }
+    
+    return `rgb(${Math.floor(value * 255)}, ${Math.floor(value * 255)}, ${Math.floor(value * 255)})`;
+}
+
+function displayPutawayChart(putawayData) {
+    const ctx = document.getElementById('putawayChart').getContext('2d');
+    
+    if (charts.putaway) {
+        charts.putaway.destroy();
+    }
+    
+    if (!putawayData || Object.keys(putawayData).length === 0) {
+        return;
+    }
+    
+    const pitchTypes = Object.keys(putawayData);
+    const labels = pitchTypes.map(pt => PITCH_LABELS[pt] || pt);
+    const data = pitchTypes.map(pt => putawayData[pt].putaway_pct || 0);
+    const colors = pitchTypes.map(pt => PITCH_COLORS[pt] || '#999');
+    
+    charts.putaway = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Putaway %',
+                data: data,
+                backgroundColor: colors,
+                borderColor: colors,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.parsed.y.toFixed(1) + '%';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Update table
+    const tbody = document.querySelector('#putawayTable tbody');
+    tbody.innerHTML = '';
+    
+    pitchTypes.forEach(pt => {
+        const row = tbody.insertRow();
+        const data = putawayData[pt];
+        row.insertCell(0).textContent = PITCH_LABELS[pt] || pt;
+        row.insertCell(1).textContent = (data.two_strike_pitches || 0).toLocaleString();
+        row.insertCell(2).textContent = (data.strikeouts || 0).toLocaleString();
+        row.insertCell(3).textContent = (data.putaway_pct || 0).toFixed(1) + '%';
+    });
+}
+
+function displaySummaryTable(summary) {
+    const tbody = document.querySelector('#summaryTable tbody');
+    tbody.innerHTML = '';
+    
+    if (!summary || Object.keys(summary).length === 0) {
+        return;
+    }
+    
+    const pitchTypes = Object.keys(summary).sort((a, b) => {
+        return (summary[b].usage_pct || 0) - (summary[a].usage_pct || 0);
+    });
+    
+    pitchTypes.forEach(pt => {
+        const row = tbody.insertRow();
+        const data = summary[pt];
+        
+        row.insertCell(0).textContent = PITCH_LABELS[pt] || pt;
+        row.insertCell(1).textContent = (data.usage_pct || 0).toFixed(1) + '%';
+        row.insertCell(2).textContent = (data.avg_run_value || 0).toFixed(3);
+        row.insertCell(3).textContent = data.whiff_rate !== null ? (data.whiff_rate || 0).toFixed(1) + '%' : 'N/A';
+        row.insertCell(4).textContent = data.ground_ball_pct !== null ? (data.ground_ball_pct || 0).toFixed(1) + '%' : 'N/A';
+        row.insertCell(5).textContent = data.putaway_pct !== null ? (data.putaway_pct || 0).toFixed(1) + '%' : 'N/A';
+        row.insertCell(6).textContent = (data.strike_rate || 0).toFixed(1) + '%';
+        row.insertCell(7).textContent = data.xwoba !== null ? (data.xwoba || 0).toFixed(3) : 'N/A';
+    });
+}
+
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.tab === tabName) {
+            btn.classList.add('active');
+        }
+    });
+    
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+        if (pane.id === `tab-${tabName}`) {
+            pane.classList.add('active');
+        }
+    });
+    
+    setTimeout(() => {
+        Object.values(charts).forEach(chart => {
+            if (chart) chart.resize();
+        });
+    }, 100);
+}
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-border);
+    color: var(--color-text-primary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.back-button:hover {
+    background: var(--color-accent);
+    transform: translateX(-2px);
+}
+
+.effectiveness-controls {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.control-group-full {
+    grid-column: 1 / -1;
+}
+
+.control-label {
+    color: var(--color-text-primary);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.control-input,
+.control-select {
+    padding: 0.75rem;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+}
+
+.control-input:focus,
+.control-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.player-search-container {
+    position: relative;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    margin-top: 0.25rem;
+}
+
+.player-dropdown-item {
+    padding: 0.75rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-border);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+}
+
+.selected-player-display span {
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+
+.clear-player-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.clear-player-btn:hover {
+    background: var(--color-accent);
+}
+
+.generate-btn {
+    grid-column: 1 / -1;
+    padding: 1rem;
+    background: var(--color-accent);
+    color: var(--color-text-primary);
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+}
+
+.generate-btn:hover:not(.disabled) {
+    background: var(--color-accent-bright);
+    transform: translateY(-2px);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.loading-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: var(--color-text-primary);
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 1rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: color-mix(in srgb, var(--color-danger) 30%, var(--color-surface));
+    border: 1px solid var(--color-danger);
+    border-radius: 6px;
+    color: #ff8888;
+    margin-bottom: 2rem;
+}
+
+.analysis-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.summary-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.summary-section h2 {
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--color-surface-muted);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border-strong);
+}
+
+.stat-label {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    color: var(--color-accent);
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.tab-navigation {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 2px solid var(--color-border);
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.tab-btn {
+    padding: 0.75rem 1.5rem;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.tab-btn:hover {
+    color: var(--color-text-primary);
+}
+
+.tab-btn.active {
+    color: var(--color-accent);
+    border-bottom-color: var(--color-accent);
+}
+
+.tab-content {
+    position: relative;
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+.heatmap-section,
+.putaway-section,
+.summary-table-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.section-header {
+    margin-bottom: 1.5rem;
+}
+
+.section-header h3 {
+    color: var(--color-text-primary);
+    font-size: 1.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.section-description {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.heatmaps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+}
+
+.heatmap-card {
+    background: var(--color-surface-muted);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1rem;
+    transition: all 0.3s ease;
+}
+
+.heatmap-card:hover {
+    border-color: var(--color-accent);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.2);
+}
+
+.heatmap-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border-strong);
+}
+
+.heatmap-header h4 {
+    color: var(--color-text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.pitch-color-indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--color-border-subtle);
+}
+
+.heatmap-container {
+    width: 100%;
+    height: 600px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-surface);
+    border-radius: 4px;
+}
+
+.heatmap-canvas {
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+}
+
+.putaway-charts-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+}
+
+.putaway-chart-wrapper {
+    height: 400px;
+}
+
+.putaway-table-container {
+    overflow-x: auto;
+}
+
+.effectiveness-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--color-text-primary);
+}
+
+.effectiveness-table thead {
+    background: var(--color-surface-muted);
+}
+
+.effectiveness-table th {
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--color-border-strong);
+    color: var(--color-accent);
+}
+
+.effectiveness-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.effectiveness-table tbody tr:hover {
+    background: var(--color-surface-muted);
+}
+
+.table-container {
+    overflow-x: auto;
+}
+
+.no-data {
+    color: var(--color-text-muted);
+    text-align: center;
+    padding: 2rem;
+    font-style: italic;
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .effectiveness-controls {
+        grid-template-columns: 1fr;
+    }
+    
+    .summary-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .heatmaps-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .putaway-charts-container {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+

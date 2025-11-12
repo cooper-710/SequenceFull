@@ -1,0 +1,1969 @@
+{% extends "base.html" %}
+{% from 'partials/idle_placeholder.html' import idle_placeholder %}
+{% block title %}Trends - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Trends</h1>
+                <p class="page-subtitle">Player performance trends across seasons</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="timeline-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Player Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="playerSearch" 
+                        class="control-input" 
+                        placeholder="Type to search players..."
+                        autocomplete="off"
+                    >
+                    <div id="playerSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedPlayerDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedPlayerName"></span>
+                    <button id="clearPlayer" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group control-group-full">
+                <label class="control-label">METRICS</label>
+                <div class="metrics-selector-container">
+                    <div class="metrics-dropdown-wrapper">
+                        <button type="button" class="metrics-dropdown-trigger" id="metricsDropdownTrigger">
+                            <span class="metrics-selected-count">Select metrics...</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="metrics-dropdown" id="metricsDropdown" style="display: none;">
+                            <div class="metrics-search">
+                                <input type="text" id="metricsSearch" class="metrics-search-input" placeholder="Search metrics...">
+                            </div>
+                            <div class="metrics-categories" id="metricsCategoriesContainer">
+                                <!-- Metrics categories are rendered dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="selected-metrics-chips" id="selectedMetricsChips"></div>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Start Season</label>
+                <input type="number" id="startSeason" class="control-input" placeholder="e.g. 2019" min="2000" max="2025" value="2019">
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">End Season</label>
+                <input type="number" id="endSeason" class="control-input" placeholder="e.g. 2024" min="2000" max="2025" value="2024">
+            </div>
+
+            <button id="generateTimeline" class="generate-btn" type="button">
+                <i class="fas fa-chart-line"></i> Generate Trends
+            </button>
+        </div>
+
+        <!-- Timeline Visualization -->
+        <div class="timeline-container">
+            <div class="timeline-wrapper">
+                <div class="timeline-header">
+                    <h2 id="timelinePlayerName">Select a player to begin</h2>
+                </div>
+
+                <div class="timeline-charts-container" id="timelineChartsContainer">
+                    <div class="timeline-placeholder heatmap-wrapper">
+                        {{ idle_placeholder('timelinePlaceholder') }}
+                    </div>
+                </div>
+
+                <div id="timelineInfo" class="timeline-info">
+                    <p>Select a player, choose metrics, and click "Generate Timeline" to visualize performance trends.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let selectedPlayer = null;
+let timelineData = null;
+let timelineCharts = {};
+let allPlayersSummary = [];
+let selectedPlayerType = 'hitter';
+let timelinePlaceholderHTML = '';
+
+const METRICS_DEFINITIONS = {
+    hitter: [
+        {
+            id: 'basic',
+            title: 'Basic Stats',
+            metrics: [
+                { value: 'AVG', label: 'Batting Average (AVG)', chipLabel: 'AVG', default: true },
+                { value: 'OBP', label: 'On-Base Percentage (OBP)', chipLabel: 'OBP' },
+                { value: 'SLG', label: 'Slugging Percentage (SLG)', chipLabel: 'SLG' },
+                { value: 'OPS', label: 'On-Base Plus Slugging (OPS)', chipLabel: 'OPS', default: true },
+                { value: 'HR', label: 'Home Runs (HR)', chipLabel: 'HR', default: true },
+                { value: 'RBI', label: 'Runs Batted In (RBI)', chipLabel: 'RBI' },
+                { value: 'R', label: 'Runs Scored (R)', chipLabel: 'R' },
+                { value: 'H', label: 'Hits (H)', chipLabel: 'H' },
+                { value: '2B', label: 'Doubles (2B)', chipLabel: '2B' },
+                { value: '3B', label: 'Triples (3B)', chipLabel: '3B' },
+                { value: 'XBH', label: 'Extra Base Hits (XBH)', chipLabel: 'XBH' },
+                { value: 'SB', label: 'Stolen Bases (SB)', chipLabel: 'SB' }
+            ]
+        },
+        {
+            id: 'advanced',
+            title: 'Advanced Metrics',
+            metrics: [
+                { value: 'wRC+', label: 'Weighted Runs Created+ (wRC+)', chipLabel: 'wRC+' },
+                { value: 'WAR', label: 'Wins Above Replacement (WAR)', chipLabel: 'WAR' },
+                { value: 'wOBA', label: 'Weighted On-Base Average (wOBA)', chipLabel: 'wOBA' },
+                { value: 'ISO', label: 'Isolated Power (ISO)', chipLabel: 'ISO' },
+                { value: 'BABIP', label: 'Batting Average on Balls in Play (BABIP)', chipLabel: 'BABIP' },
+                { value: 'wRAA', label: 'Weighted Runs Above Average (wRAA)', chipLabel: 'wRAA' }
+            ]
+        },
+        {
+            id: 'discipline',
+            title: 'Plate Discipline',
+            metrics: [
+                { value: 'BB', label: 'Walks (BB)', chipLabel: 'BB' },
+                { value: 'BB%', label: 'Walk Rate (BB%)', chipLabel: 'BB%' },
+                { value: 'K', label: 'Strikeouts (K)', chipLabel: 'K', prefersLower: true },
+                { value: 'K%', label: 'Strikeout Rate (K%)', chipLabel: 'K%', prefersLower: true },
+                { value: 'BB/K', label: 'Walk-to-Strikeout Ratio (BB/K)', chipLabel: 'BB/K' },
+                { value: 'PA', label: 'Plate Appearances (PA)', chipLabel: 'PA' },
+                { value: 'AB', label: 'At-Bats (AB)', chipLabel: 'AB' }
+            ]
+        },
+        {
+            id: 'batted',
+            title: 'Batted Ball',
+            metrics: [
+                { value: 'GB%', label: 'Ground Ball Rate (GB%)', chipLabel: 'GB%' },
+                { value: 'FB%', label: 'Fly Ball Rate (FB%)', chipLabel: 'FB%' },
+                { value: 'LD%', label: 'Line Drive Rate (LD%)', chipLabel: 'LD%' },
+                { value: 'GB/FB', label: 'Ground Ball to Fly Ball Ratio (GB/FB)', chipLabel: 'GB/FB' },
+                { value: 'HR/FB', label: 'Home Run per Fly Ball (HR/FB)', chipLabel: 'HR/FB' },
+                { value: 'Barrel%', label: 'Barrel Rate (Barrel%)', chipLabel: 'Barrel%' }
+            ]
+        },
+        {
+            id: 'expected',
+            title: 'Expected Stats',
+            metrics: [
+                { value: 'xBA', label: 'Expected Batting Average (xBA)', chipLabel: 'xBA' },
+                { value: 'xSLG', label: 'Expected Slugging (xSLG)', chipLabel: 'xSLG' },
+                { value: 'xwOBA', label: 'Expected Weighted On-Base Average (xwOBA)', chipLabel: 'xwOBA' }
+            ]
+        }
+    ],
+    pitcher: [
+        {
+            id: 'run_prevention',
+            title: 'Run Prevention',
+            metrics: [
+                { value: 'ERA', label: 'Earned Run Average (ERA)', chipLabel: 'ERA', default: true, prefersLower: true },
+                { value: 'WHIP', label: 'Walks + Hits per Inning (WHIP)', chipLabel: 'WHIP', default: true, prefersLower: true },
+                { value: 'FIP', label: 'Fielding Independent Pitching (FIP)', chipLabel: 'FIP', prefersLower: true },
+                { value: 'xFIP', label: 'Expected Fielding Independent Pitching (xFIP)', chipLabel: 'xFIP', prefersLower: true },
+                { value: 'xERA', label: 'Expected ERA (xERA)', chipLabel: 'xERA', prefersLower: true },
+                { value: 'SIERA', label: 'Skill-Interactive ERA (SIERA)', chipLabel: 'SIERA', prefersLower: true }
+            ]
+        },
+        {
+            id: 'strikeout_walk',
+            title: 'Strikeouts & Walks',
+            metrics: [
+                { value: 'K/9', label: 'Strikeouts per 9 (K/9)', chipLabel: 'K/9', default: true },
+                { value: 'BB/9', label: 'Walks per 9 (BB/9)', chipLabel: 'BB/9', prefersLower: true },
+                { value: 'K%', label: 'Strikeout Rate (K%)', chipLabel: 'K%' },
+                { value: 'BB%', label: 'Walk Rate (BB%)', chipLabel: 'BB%', prefersLower: true },
+                { value: 'K-BB%', label: 'Strikeout Minus Walk Rate (K-BB%)', chipLabel: 'K-BB%' },
+                { value: 'K/BB', label: 'Strikeout-to-Walk Ratio (K/BB)', chipLabel: 'K/BB' }
+            ]
+        },
+        {
+            id: 'volume',
+            title: 'Volume & Results',
+            metrics: [
+                { value: 'IP', label: 'Innings Pitched (IP)', chipLabel: 'IP' },
+                { value: 'G', label: 'Games (G)', chipLabel: 'G' },
+                { value: 'GS', label: 'Games Started (GS)', chipLabel: 'GS' },
+                { value: 'SV', label: 'Saves (SV)', chipLabel: 'SV' },
+                { value: 'W', label: 'Wins (W)', chipLabel: 'W' },
+                { value: 'L', label: 'Losses (L)', chipLabel: 'L', prefersLower: true },
+                { value: 'WAR', label: 'Wins Above Replacement (WAR)', chipLabel: 'WAR' }
+            ]
+        },
+        {
+            id: 'batted_ball_pitching',
+            title: 'Batted Ball',
+            metrics: [
+                { value: 'GB%', label: 'Ground Ball Rate (GB%)', chipLabel: 'GB%' },
+                { value: 'FB%', label: 'Fly Ball Rate (FB%)', chipLabel: 'FB%' },
+                { value: 'LD%', label: 'Line Drive Rate (LD%)', chipLabel: 'LD%' },
+                { value: 'HR/FB', label: 'Home Run per Fly Ball (HR/FB)', chipLabel: 'HR/FB', prefersLower: true },
+                { value: 'BABIP', label: 'Batting Average on Balls in Play (BABIP)', chipLabel: 'BABIP' }
+            ]
+        },
+        {
+            id: 'command',
+            title: 'Command & Efficiency',
+            metrics: [
+                { value: 'ERA-', label: 'ERA- (Run Prevention Index)', chipLabel: 'ERA-', prefersLower: true },
+                { value: 'FIP-', label: 'FIP- (Run Prevention Index)', chipLabel: 'FIP-', prefersLower: true },
+                { value: 'LOB%', label: 'Left On Base Percentage (LOB%)', chipLabel: 'LOB%' },
+                { value: 'CSW%', label: 'Called + Swinging Strike Rate (CSW%)', chipLabel: 'CSW%' },
+                { value: 'Pitches', label: 'Total Pitches Thrown', chipLabel: 'Pitches' }
+            ]
+        }
+    ]
+};
+
+const DEFAULT_SELECTED_METRICS = {
+    hitter: ['AVG', 'OPS', 'HR'],
+    pitcher: ['ERA', 'WHIP', 'K/9']
+};
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadFilterOptions();
+    setupPlayerSearch();
+    
+    const chartsContainer = document.getElementById('timelineChartsContainer');
+    if (chartsContainer) {
+        timelinePlaceholderHTML = chartsContainer.innerHTML;
+    }
+    
+    const generateBtn = document.getElementById('generateTimeline');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+        generateBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!selectedPlayer) {
+                alert('Please select a player first');
+                return;
+            }
+            this.classList.remove('disabled');
+            generateTimeline();
+        });
+    }
+
+    document.getElementById('clearPlayer').addEventListener('click', function() {
+        clearPlayerSelection();
+    });
+
+    // Setup metrics dropdown
+    setupMetricsDropdown();
+});
+
+async function loadFilterOptions() {
+    try {
+        const response = await fetch('/api/analytics/players');
+        const data = await response.json();
+        if (data.players) {
+            allPlayersSummary = data.players;
+            console.log(`Loaded ${data.players.length} players for search`);
+        } else {
+            allPlayersSummary = [];
+            console.warn('No players returned for analytics filters');
+        }
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+        allPlayersSummary = [];
+    }
+}
+
+let searchTimeout = null;
+
+function setupPlayerSearch() {
+    const input = document.getElementById('playerSearch');
+    const dropdown = document.getElementById('playerSearchDropdown');
+    
+    if (!input || !dropdown) return;
+    
+    input.disabled = false;
+    input.readOnly = false;
+    input.style.pointerEvents = 'auto';
+    
+    async function searchPlayers() {
+        const searchTerm = input.value.trim();
+        
+        if (!searchTerm || searchTerm.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/csv/search?q=${encodeURIComponent(searchTerm)}`);
+            const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+            
+            const players = data.players || [];
+            
+            if (players.length === 0) {
+                dropdown.innerHTML = '<div class="player-dropdown-item" style="color: var(--color-text-muted);">No players found</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            dropdown.innerHTML = players.slice(0, 10).map(player => 
+                `<div class="player-dropdown-item" data-player="${player.name.replace(/"/g, '&quot;')}">${player.name}</div>`
+            ).join('');
+            dropdown.style.display = 'block';
+            
+            dropdown.querySelectorAll('.player-dropdown-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const playerName = this.getAttribute('data-player');
+                    if (playerName && !playerName.includes('No players found')) {
+                        selectPlayer(playerName);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Search error:', error);
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    input.addEventListener('input', function(e) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(searchPlayers, 300);
+    });
+    
+    input.addEventListener('focus', function() {
+        if (this.value.trim().length >= 2) {
+            searchPlayers();
+        }
+    });
+    
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(searchTimeout);
+            const firstMatch = dropdown.querySelector('.player-dropdown-item[data-player]');
+            if (firstMatch && !firstMatch.textContent.includes('No players found')) {
+                firstMatch.click();
+            } else if (this.value.trim().length >= 2) {
+                selectPlayer(this.value.trim());
+            }
+        }
+    });
+    
+    document.addEventListener('click', function(e) {
+        if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+async function selectPlayer(playerName) {
+    selectedPlayer = playerName;
+    document.getElementById('selectedPlayerName').textContent = playerName;
+    document.getElementById('selectedPlayerDisplay').style.display = 'flex';
+    const searchInput = document.getElementById('playerSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('playerSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    document.getElementById('timelinePlayerName').textContent = playerName;
+    
+    const generateBtn = document.getElementById('generateTimeline');
+    if (generateBtn) {
+        generateBtn.classList.remove('disabled');
+    }
+
+    const previousType = selectedPlayerType;
+    const resolvedType = await resolvePlayerType(playerName);
+    const preserveSelection = previousType === resolvedType;
+    selectedPlayerType = resolvedType;
+    
+    console.log(`Player ${playerName} identified as ${selectedPlayerType}`);
+    renderMetricsOptionsForType(selectedPlayerType, { preserveSelection });
+}
+
+function clearPlayerSelection() {
+    selectedPlayer = null;
+    document.getElementById('selectedPlayerDisplay').style.display = 'none';
+    document.getElementById('playerSearch').value = '';
+    document.getElementById('timelinePlayerName').textContent = 'Select a player to begin';
+    
+    const generateBtn = document.getElementById('generateTimeline');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+    }
+    
+    clearTimeline();
+    
+    selectedPlayerType = 'hitter';
+    renderMetricsOptionsForType(selectedPlayerType, { preserveSelection: false });
+}
+
+async function resolvePlayerType(playerName) {
+    if (!playerName) {
+        return 'hitter';
+    }
+    
+    const normalized = playerName.trim().toLowerCase();
+    
+    if (Array.isArray(allPlayersSummary) && allPlayersSummary.length > 0) {
+        const matched = allPlayersSummary.find(player => (player.name || '').trim().toLowerCase() === normalized);
+        if (matched && matched.position) {
+            const positionText = String(matched.position).toUpperCase();
+            if (positionText.includes('P')) {
+                return 'pitcher';
+            }
+        }
+    }
+    
+    try {
+        const response = await fetch(`/api/visuals/heatmap/player-info?player=${encodeURIComponent(playerName)}`);
+        if (response.ok) {
+            const data = await response.json();
+            if (data && typeof data.is_pitcher === 'boolean') {
+                return data.is_pitcher ? 'pitcher' : 'hitter';
+            }
+        }
+    } catch (error) {
+        console.warn('Unable to determine player type from API:', error);
+    }
+    
+    return 'hitter';
+}
+
+function setupMetricsDropdown() {
+    const trigger = document.getElementById('metricsDropdownTrigger');
+    const dropdown = document.getElementById('metricsDropdown');
+    const searchInput = document.getElementById('metricsSearch');
+    
+    if (trigger && dropdown) {
+        trigger.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const isOpen = dropdown.style.display !== 'none';
+            dropdown.style.display = isOpen ? 'none' : 'block';
+            trigger.classList.toggle('active', !isOpen);
+            
+            if (!isOpen && searchInput) {
+                setTimeout(() => searchInput.focus(), 100);
+            }
+        });
+    }
+    
+    document.addEventListener('click', function(e) {
+        if (dropdown && !dropdown.contains(e.target) && trigger && !trigger.contains(e.target)) {
+            dropdown.style.display = 'none';
+            trigger.classList.remove('active');
+        }
+    });
+    
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            filterMetricsOptions(this.value);
+        });
+    }
+    
+    renderMetricsOptionsForType(selectedPlayerType || 'hitter', { preserveSelection: false });
+}
+
+function renderMetricsOptionsForType(playerType, options = {}) {
+    const dropdown = document.getElementById('metricsDropdown');
+    const container = document.getElementById('metricsCategoriesContainer');
+    if (!dropdown || !container) {
+        return;
+    }
+    
+    const definitions = METRICS_DEFINITIONS[playerType] || [];
+    const allowedValues = new Set(definitions.flatMap(category => category.metrics.map(metric => metric.value)));
+    
+    let selectedValues = [];
+    if (options.preserveSelection) {
+        selectedValues = Array.from(dropdown.querySelectorAll('.metric-option input:checked'))
+            .map(cb => cb.value)
+            .filter(value => allowedValues.has(value));
+    }
+    
+    if (selectedValues.length === 0) {
+        const defaults = DEFAULT_SELECTED_METRICS[playerType] || [];
+        selectedValues = defaults.filter(value => allowedValues.has(value));
+    }
+    
+    if (selectedValues.length === 0 && definitions.length > 0) {
+        const fallbackMetric = definitions[0].metrics[0];
+        if (fallbackMetric) {
+            selectedValues.push(fallbackMetric.value);
+        }
+    }
+    
+    const selectedSet = new Set(selectedValues);
+    
+    container.innerHTML = definitions.map(category => `
+        <div class="metrics-category" data-player-type="${playerType}">
+            <div class="category-header">
+                <span class="category-title">${category.title}</span>
+                <button type="button" class="category-toggle" data-category="${category.id}">Select All</button>
+            </div>
+            <div class="category-options" data-category="${category.id}">
+                ${category.metrics.map(metric => `
+                    <label class="metric-option" data-metric="${metric.value}">
+                        <input type="checkbox" value="${metric.value}" ${selectedSet.has(metric.value) ? 'checked' : ''}>
+                        <span>${metric.label}</span>
+                    </label>
+                `).join('')}
+            </div>
+        </div>
+    `).join('');
+    
+    const searchInput = document.getElementById('metricsSearch');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    
+    filterMetricsOptions('');
+    bindMetricsDropdownEvents();
+}
+
+function bindMetricsDropdownEvents() {
+    const dropdown = document.getElementById('metricsDropdown');
+    if (!dropdown) return;
+    
+    dropdown.querySelectorAll('.category-toggle').forEach(toggle => {
+        toggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const categoryId = this.getAttribute('data-category');
+            const inputs = dropdown.querySelectorAll(`.category-options[data-category="${categoryId}"] .metric-option input`);
+            const inputsArray = Array.from(inputs);
+            const allChecked = inputsArray.length > 0 && inputsArray.every(cb => cb.checked);
+            
+            inputsArray.forEach(cb => {
+                cb.checked = !allChecked;
+            });
+            
+            updateSelectedMetrics();
+            updateCategoryToggleLabels();
+        });
+    });
+    
+    dropdown.querySelectorAll('.metric-option input').forEach(input => {
+        input.addEventListener('change', function() {
+            updateSelectedMetrics();
+            updateCategoryToggleLabels();
+        });
+    });
+    
+    updateCategoryToggleLabels();
+    updateSelectedMetrics();
+}
+
+function filterMetricsOptions(searchTerm = '') {
+    const dropdown = document.getElementById('metricsDropdown');
+    if (!dropdown) return;
+    
+    const normalized = searchTerm.trim().toLowerCase();
+    const matchesAll = normalized.length === 0;
+    
+    dropdown.querySelectorAll('.metric-option').forEach(option => {
+        const text = option.textContent.toLowerCase();
+        const show = matchesAll || text.includes(normalized);
+        option.style.display = show ? 'flex' : 'none';
+    });
+    
+    dropdown.querySelectorAll('.metrics-category').forEach(category => {
+        const hasVisible = Array.from(category.querySelectorAll('.metric-option')).some(option => option.style.display !== 'none');
+        category.style.display = hasVisible ? 'block' : (matchesAll ? 'block' : 'none');
+    });
+}
+
+function updateCategoryToggleLabels() {
+    const dropdown = document.getElementById('metricsDropdown');
+    if (!dropdown) return;
+    
+    dropdown.querySelectorAll('.category-toggle').forEach(toggle => {
+        const categoryId = toggle.getAttribute('data-category');
+        const inputs = dropdown.querySelectorAll(`.category-options[data-category="${categoryId}"] .metric-option input`);
+        if (inputs.length === 0) {
+            toggle.textContent = 'Select All';
+            return;
+        }
+        const allChecked = Array.from(inputs).every(cb => cb.checked);
+        toggle.textContent = allChecked ? 'Deselect All' : 'Select All';
+    });
+}
+
+function getMetricDefinition(metric) {
+    for (const typeKey of Object.keys(METRICS_DEFINITIONS)) {
+        for (const category of METRICS_DEFINITIONS[typeKey]) {
+            const match = category.metrics.find(item => item.value === metric);
+            if (match) {
+                return match;
+            }
+        }
+    }
+    return null;
+}
+
+function metricPrefersLower(metric) {
+    const currentDefinitions = METRICS_DEFINITIONS[selectedPlayerType] || [];
+    for (const category of currentDefinitions) {
+        const match = category.metrics.find(item => item.value === metric);
+        if (match) {
+            return !!match.prefersLower;
+        }
+    }
+    for (const typeKey of Object.keys(METRICS_DEFINITIONS)) {
+        for (const category of METRICS_DEFINITIONS[typeKey]) {
+            const match = category.metrics.find(item => item.value === metric);
+            if (match) {
+                return !!match.prefersLower;
+            }
+        }
+    }
+    return false;
+}
+
+function getMetricLabel(metric) {
+    const definition = getMetricDefinition(metric);
+    return definition ? definition.label : metric;
+}
+
+function getMetricShortLabel(metric) {
+    const definition = getMetricDefinition(metric);
+    if (definition) {
+        return definition.chipLabel || definition.value || metric;
+    }
+    return metric;
+}
+
+function updateSelectedMetrics() {
+    const selected = Array.from(document.querySelectorAll('.metric-option input:checked')).map(cb => cb.value);
+    const count = selected.length;
+    const countSpan = document.querySelector('.metrics-selected-count');
+    const chipsContainer = document.getElementById('selectedMetricsChips');
+    
+    if (countSpan) {
+        countSpan.textContent = count === 0 ? 'Select metrics...' : `${count} metric${count !== 1 ? 's' : ''} selected`;
+    }
+    
+    if (chipsContainer) {
+        if (count === 0) {
+            chipsContainer.innerHTML = '';
+        } else {
+            chipsContainer.innerHTML = selected.map(value => {
+                const label = getMetricShortLabel(value);
+                return `
+                    <div class="metric-chip">
+                        <span>${label}</span>
+                        <button type="button" class="chip-remove" data-value="${value}">×</button>
+                    </div>
+                `;
+            }).join('');
+            
+            chipsContainer.querySelectorAll('.chip-remove').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const value = this.getAttribute('data-value');
+                    const checkbox = document.querySelector(`.metric-option input[value="${value}"]`);
+                    if (checkbox) {
+                        checkbox.checked = false;
+                        updateSelectedMetrics();
+                        updateCategoryToggleLabels();
+                    }
+                });
+            });
+        }
+    }
+}
+
+async function generateTimeline() {
+    if (!selectedPlayer) {
+        alert('Please select a player first');
+        return;
+    }
+
+    const selectedMetrics = Array.from(document.querySelectorAll('.metric-option input:checked')).map(cb => cb.value);
+    if (selectedMetrics.length === 0) {
+        alert('Please select at least one metric');
+        return;
+    }
+
+    // Get and validate season inputs
+    const startSeasonInput = document.getElementById('startSeason').value.trim();
+    const endSeasonInput = document.getElementById('endSeason').value.trim();
+    
+    const startSeason = startSeasonInput ? parseInt(startSeasonInput) : null;
+    const endSeason = endSeasonInput ? parseInt(endSeasonInput) : null;
+    
+    // Validate season values
+    if (startSeason && (isNaN(startSeason) || startSeason < 1900 || startSeason > 2100)) {
+        alert('Please enter a valid start season (between 1900 and 2100)');
+        return;
+    }
+    
+    if (endSeason && (isNaN(endSeason) || endSeason < 1900 || endSeason > 2100)) {
+        alert('Please enter a valid end season (between 1900 and 2100)');
+        return;
+    }
+    
+    if (startSeason && endSeason && startSeason > endSeason) {
+        alert('Start season must be less than or equal to end season');
+        return;
+    }
+    
+    console.log(`Generating timeline for ${selectedPlayer} from ${startSeason || 'all'} to ${endSeason || 'all'}`);
+
+    const info = document.getElementById('timelineInfo');
+    info.innerHTML = `
+        <div class="timeline-info-message timeline-info-loading">
+            <div class="timeline-info-title">Generating Timeline…</div>
+            <div class="timeline-info-text">Fetching performance data across seasons.</div>
+        </div>
+    `;
+
+    try {
+        // Build URL with all stats at once
+        const params = new URLSearchParams({
+            player: selectedPlayer
+        });
+        
+        // Add stats
+        selectedMetrics.forEach(metric => {
+            params.append('stats', metric);
+        });
+        
+        // Add season filters only if provided
+        if (startSeason !== null) {
+            params.append('season_start', startSeason.toString());
+        }
+        if (endSeason !== null) {
+            params.append('season_end', endSeason.toString());
+        }
+        
+        const url = `/api/analytics/trends?${params.toString()}`;
+        console.log('Fetching trends from:', url);
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `HTTP ${response.status}: Failed to fetch trends data`);
+        }
+        
+        const apiData = await response.json();
+        console.log('API Response:', apiData);
+        
+        // Check for API errors
+        if (apiData.error) {
+            throw new Error(apiData.error);
+        }
+        
+        // Check if we have trends data
+        if (!apiData.trends || !Array.isArray(apiData.trends) || apiData.trends.length === 0) {
+            throw new Error(`No data found for ${selectedPlayer} in the selected season range (${startSeason || 'all'} - ${endSeason || 'all'}). Please try a different season range.`);
+        }
+        
+        // Transform API response to chart-friendly format
+        // API returns: { player: "...", trends: [{ season: X, stats: {...} }, ...] }
+        // We need: { seasons: [...], values: [...] } for each metric
+        const transformedTrends = selectedMetrics.map(metric => {
+            const seasons = [];
+            const values = [];
+            
+            apiData.trends.forEach(trend => {
+                if (trend.season !== null && trend.season !== undefined) {
+                    seasons.push(trend.season);
+                    // Get the stat value from the stats object
+                    const statValue = trend.stats && trend.stats[metric] !== undefined 
+                        ? trend.stats[metric] 
+                        : null;
+                    values.push(statValue);
+                }
+            });
+            
+            console.log(`Metric ${metric}: ${seasons.length} seasons`, { seasons, values });
+            
+            return {
+                seasons: seasons,
+                values: values
+            };
+        });
+        
+        // Combine data
+        timelineData = {
+            player: selectedPlayer,
+            metrics: selectedMetrics,
+            trends: transformedTrends,
+            startSeason,
+            endSeason
+        };
+
+        renderTimeline(timelineData);
+    } catch (error) {
+        console.error('Error generating timeline:', error);
+        const errorMessage = error.message || 'Unknown error occurred';
+        info.innerHTML = `
+            <div class="timeline-info-message timeline-info-warning">
+                <div class="timeline-info-title">Unable to generate timeline</div>
+                <div class="timeline-info-text">${errorMessage}</div>
+            </div>
+        `;
+        
+        // Show placeholder again
+        const container = document.getElementById('timelineChartsContainer');
+        const placeholder = container.querySelector('.timeline-placeholder');
+        if (placeholder) {
+            placeholder.style.display = 'flex';
+        }
+    }
+}
+
+function renderTimeline(data) {
+    const container = document.getElementById('timelineChartsContainer');
+    const placeholder = container.querySelector('.timeline-placeholder');
+    if (placeholder) {
+        placeholder.style.display = 'none';
+    }
+
+    // Clear existing charts
+    Object.values(timelineCharts).forEach(chart => {
+        if (chart) chart.destroy();
+    });
+    timelineCharts = {};
+
+    // Create chart for each metric
+    container.innerHTML = '';
+    
+    data.metrics.forEach((metric, index) => {
+        const trendData = data.trends[index];
+        if (!trendData || !trendData.seasons || trendData.seasons.length === 0) {
+            return;
+        }
+
+        const chartContainer = document.createElement('div');
+        chartContainer.className = 'chart-card';
+        chartContainer.innerHTML = `
+            <div class="chart-header">
+                <h3>${getMetricName(metric)}</h3>
+                <div class="chart-stats" id="stats-${metric}"></div>
+            </div>
+            <canvas id="chart-${metric}"></canvas>
+        `;
+        container.appendChild(chartContainer);
+
+        const canvas = document.getElementById(`chart-${metric}`);
+        const ctx = canvas.getContext('2d');
+
+        const seasons = trendData.seasons || [];
+        const values = trendData.values || [];
+        
+        // Ensure we show the full range from startSeason to endSeason, even if some years don't have data
+        const fullSeasonRange = [];
+        if (data.startSeason && data.endSeason) {
+            for (let year = data.startSeason; year <= data.endSeason; year++) {
+                fullSeasonRange.push(year);
+            }
+        } else {
+            // Use actual seasons from data if no range specified
+            if (seasons.length > 0) {
+                const minSeason = Math.min(...seasons);
+                const maxSeason = Math.max(...seasons);
+                for (let year = minSeason; year <= maxSeason; year++) {
+                    fullSeasonRange.push(year);
+                }
+            } else {
+                fullSeasonRange.push(...seasons);
+            }
+        }
+        
+        // Map values to the full season range (use null for years without data)
+        const chartValues = fullSeasonRange.map(year => {
+            const index = seasons.indexOf(year);
+            if (index >= 0 && index < values.length) {
+                const val = values[index];
+                return (val !== null && val !== undefined && !isNaN(val)) ? val : null;
+            }
+            return null;
+        });
+        
+        // Filter out null values for valid data points (used for stats calculations)
+        const validData = seasons.map((season, idx) => ({
+            season: season,
+            value: values[idx],
+            index: idx
+        })).filter(d => d.value !== null && d.value !== undefined && !isNaN(d.value));
+        
+        if (validData.length === 0) {
+            console.warn(`No valid data for metric ${metric}`);
+        }
+        
+        // Use full season range for chart x-axis
+        const chartSeasons = fullSeasonRange;
+
+        // Detect theme for tooltip styling
+        const isLightMode = document.body.getAttribute('data-theme') === 'light';
+        const tooltipBg = isLightMode ? 'rgba(255, 255, 255, 0.98)' : 'rgba(10, 10, 10, 0.95)';
+        const tooltipBorder = isLightMode ? 'rgba(0, 0, 0, 0.2)' : 'var(--color-accent)';
+        const tooltipTitleColor = isLightMode ? 'var(--color-accent)' : 'var(--color-accent)';
+        const tooltipBodyColor = isLightMode ? 'rgba(0, 0, 0, 0.9)' : 'var(--color-text-primary)';
+
+        timelineCharts[metric] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartSeasons,
+                datasets: [{
+                    label: getMetricName(metric),
+                    data: chartValues,
+                    spanGaps: true, // Draw lines across gaps (null values)
+                    borderColor: getMetricColor(metric),
+                    backgroundColor: getMetricColor(metric, 0.1),
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
+                    pointBackgroundColor: getMetricColor(metric),
+                    pointBorderColor: 'var(--color-text-primary)',
+                    pointBorderWidth: 2,
+                    pointHoverBackgroundColor: 'var(--color-text-primary)',
+                    pointHoverBorderColor: getMetricColor(metric),
+                    pointHoverBorderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 1000,
+                    easing: 'easeOutQuart'
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: tooltipBg,
+                        titleColor: tooltipTitleColor,
+                        bodyColor: tooltipBodyColor,
+                        borderColor: tooltipBorder,
+                        borderWidth: 1,
+                        padding: 12,
+                        displayColors: false,
+                        callbacks: {
+                            label: function(context) {
+                                const originalValue = chartValues[context.dataIndex];
+                                return `${getMetricName(metric)}: ${formatMetricValue(originalValue, metric)}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: 'var(--color-text-muted)',
+                            font: {
+                                size: 11,
+                                weight: '500'
+                            }
+                        }
+                    },
+                    y: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: 'var(--color-text-muted)',
+                            font: {
+                                size: 11,
+                                weight: '500'
+                            },
+                            callback: function(value) {
+                                // Chart.js provides the actual value, just format it
+                                return formatMetricValue(value, metric);
+                            }
+                        }
+                    }
+                },
+                onHover: (event, activeElements) => {
+                    event.native.target.style.cursor = activeElements.length > 0 ? 'pointer' : 'default';
+                }
+            }
+        });
+
+        // Update stats preview
+        updateChartStats(metric, values, seasons);
+    });
+    
+    // Update info
+    updateTimelineInfo(data);
+}
+
+function normalizeValues(values, metric) {
+    // Normalize to 0-100 scale for consistent chart heights
+    if (values.length === 0) return [];
+    
+    // Filter out null/undefined values for min/max calculation
+    const validValues = values.filter(v => v !== null && v !== undefined && !isNaN(v));
+    if (validValues.length === 0) {
+        // All values are null/undefined, return array of nulls
+        return values.map(() => null);
+    }
+    
+    const min = Math.min(...validValues);
+    const max = Math.max(...validValues);
+    const range = max - min || 1;
+    
+    // Normalize values, preserving nulls
+    return values.map(v => {
+        if (v === null || v === undefined || isNaN(v)) {
+            return null;
+        }
+        return ((v - min) / range) * 100;
+    });
+}
+
+function getMetricName(metric) {
+    return getMetricLabel(metric);
+}
+
+function getMetricColor(metric, alpha = 1) {
+    // Generate consistent colors based on metric name hash
+    const colors = {
+        'AVG': `rgba(255, 127, 0, ${alpha})`,
+        'HR': `rgba(244, 67, 54, ${alpha})`,
+        'RBI': `rgba(33, 150, 243, ${alpha})`,
+        'OPS': `rgba(156, 39, 176, ${alpha})`,
+        'SLG': `rgba(76, 175, 80, ${alpha})`,
+        'OBP': `rgba(255, 193, 7, ${alpha})`,
+        'wRC+': `rgba(0, 188, 212, ${alpha})`,
+        'WAR': `rgba(255, 87, 34, ${alpha})`,
+        'R': `rgba(233, 30, 99, ${alpha})`,
+        'H': `rgba(139, 195, 74, ${alpha})`,
+        '2B': `rgba(3, 169, 244, ${alpha})`,
+        '3B': `rgba(103, 58, 183, ${alpha})`,
+        'XBH': `rgba(255, 152, 0, ${alpha})`,
+        'SB': `rgba(0, 150, 136, ${alpha})`,
+        'wOBA': `rgba(63, 81, 181, ${alpha})`,
+        'ISO': `rgba(205, 220, 57, ${alpha})`,
+        'BABIP': `rgba(121, 85, 72, ${alpha})`,
+        'wRAA': `rgba(158, 158, 158, ${alpha})`,
+        'BB': `rgba(96, 125, 139, ${alpha})`,
+        'BB%': `rgba(171, 71, 188, ${alpha})`,
+        'K': `rgba(229, 57, 53, ${alpha})`,
+        'K%': `rgba(244, 67, 54, ${alpha})`,
+        'BB/K': `rgba(255, 235, 59, ${alpha})`,
+        'PA': `rgba(144, 202, 249, ${alpha})`,
+        'AB': `rgba(129, 199, 132, ${alpha})`,
+        'GB%': `rgba(77, 182, 172, ${alpha})`,
+        'FB%': `rgba(100, 181, 246, ${alpha})`,
+        'LD%': `rgba(186, 104, 200, ${alpha})`,
+        'GB/FB': `rgba(161, 136, 127, ${alpha})`,
+        'HR/FB': `rgba(255, 112, 67, ${alpha})`,
+        'Barrel%': `rgba(255, 167, 38, ${alpha})`,
+        'xBA': `rgba(255, 99, 132, ${alpha})`,
+        'xSLG': `rgba(54, 162, 235, ${alpha})`,
+        'xwOBA': `rgba(255, 206, 86, ${alpha})`,
+        'ERA': `rgba(198, 40, 40, ${alpha})`,
+        'WHIP': `rgba(173, 20, 87, ${alpha})`,
+        'FIP': `rgba(94, 53, 177, ${alpha})`,
+        'xFIP': `rgba(81, 45, 168, ${alpha})`,
+        'xERA': `rgba(0, 121, 107, ${alpha})`,
+        'SIERA': `rgba(0, 150, 136, ${alpha})`,
+        'K/9': `rgba(33, 150, 243, ${alpha})`,
+        'BB/9': `rgba(30, 136, 229, ${alpha})`,
+        'K-BB%': `rgba(25, 118, 210, ${alpha})`,
+        'K/BB': `rgba(21, 101, 192, ${alpha})`,
+        'IP': `rgba(255, 112, 67, ${alpha})`,
+        'G': `rgba(255, 171, 64, ${alpha})`,
+        'GS': `rgba(239, 108, 0, ${alpha})`,
+        'SV': `rgba(255, 213, 79, ${alpha})`,
+        'W': `rgba(124, 179, 66, ${alpha})`,
+        'L': `rgba(96, 125, 139, ${alpha})`,
+        'ERA-': `rgba(156, 204, 101, ${alpha})`,
+        'FIP-': `rgba(77, 182, 172, ${alpha})`,
+        'LOB%': `rgba(0, 188, 212, ${alpha})`,
+        'CSW%': `rgba(0, 151, 167, ${alpha})`,
+        'Pitches': `rgba(121, 85, 72, ${alpha})`
+    };
+    
+    if (colors[metric]) {
+        return colors[metric];
+    }
+    
+    // Generate a color based on metric name hash for unknown metrics
+    let hash = 0;
+    for (let i = 0; i < metric.length; i++) {
+        hash = metric.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const hue = Math.abs(hash) % 360;
+    return `hsla(${hue}, 70%, 60%, ${alpha})`;
+}
+
+function formatMetricValue(value, metric) {
+    if (value === null || value === undefined || isNaN(value)) return 'N/A';
+    
+    const threeDecimalMetrics = new Set(['AVG', 'OBP', 'SLG', 'OPS', 'wOBA', 'ISO', 'BABIP', 'xBA', 'xSLG', 'xwOBA']);
+    const twoDecimalMetrics = new Set(['ERA', 'WHIP', 'FIP', 'xFIP', 'xERA', 'SIERA', 'K/9', 'BB/9', 'K/BB', 'GB/FB']);
+    const oneDecimalMetrics = new Set(['WAR', 'wRC+', 'wRAA']);
+    const percentMetrics = new Set(['BB%', 'K%', 'K-BB%', 'GB%', 'FB%', 'LD%', 'HR/FB', 'Barrel%', 'LOB%', 'CSW%']);
+    const inningsMetrics = new Set(['IP']);
+    const indexMetrics = new Set(['ERA-', 'FIP-']);
+    const integerMetrics = new Set(['SV', 'W', 'L', 'G', 'GS', 'BB', 'K', 'RBI', 'R', 'H', '2B', '3B', 'XBH', 'SB', 'PA', 'AB', 'Pitches']);
+    
+    if (threeDecimalMetrics.has(metric)) {
+        return value.toFixed(3);
+    }
+    if (twoDecimalMetrics.has(metric)) {
+        return value.toFixed(2);
+    }
+    if (oneDecimalMetrics.has(metric)) {
+        return value.toFixed(1);
+    }
+    if (percentMetrics.has(metric)) {
+        const percentValue = value > 1 ? value : value * 100;
+        return `${percentValue.toFixed(1)}%`;
+    }
+    if (inningsMetrics.has(metric)) {
+        return Number.isInteger(value) ? `${value}` : value.toFixed(1);
+    }
+    if (indexMetrics.has(metric)) {
+        return Math.round(value).toLocaleString();
+    }
+    if (integerMetrics.has(metric)) {
+        return Math.round(value).toLocaleString();
+    }
+    
+    return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(2);
+}
+
+function updateChartStats(metric, values, seasons) {
+    const statsElement = document.getElementById(`stats-${metric}`);
+    if (!statsElement || values.length === 0) return;
+
+    // Filter out null/undefined values for calculations
+    const validValues = values.filter(v => v !== null && v !== undefined && !isNaN(v));
+    if (validValues.length === 0) {
+        statsElement.innerHTML = `
+            <div class="stat-item">
+                <span class="stat-label">Current:</span>
+                <span class="stat-value">N/A</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Best:</span>
+                <span class="stat-value">N/A</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Avg:</span>
+                <span class="stat-value">N/A</span>
+            </div>
+        `;
+        return;
+    }
+
+    const prefersLower = metricPrefersLower(metric);
+    const current = validValues[validValues.length - 1];
+    const previous = validValues.length > 1 ? validValues[validValues.length - 2] : null;
+    const avg = validValues.reduce((a, b) => a + b, 0) / validValues.length;
+
+    let best = null;
+    let bestSeason = 'N/A';
+    values.forEach((val, idx) => {
+        if (val === null || val === undefined || isNaN(val)) {
+            return;
+        }
+        if (best === null || (prefersLower ? val < best : val > best)) {
+            best = val;
+            bestSeason = seasons[idx] ?? 'N/A';
+        }
+    });
+
+    let changeText = '';
+    if (previous !== null) {
+        const change = current - previous;
+        const improvement = prefersLower ? change <= 0 : change >= 0;
+        const arrowDirection = change >= 0 ? 'up' : 'down';
+        const percentValue = previous === 0 ? 0 : (Math.abs(change) / Math.abs(previous)) * 100;
+        changeText = `<span class="stat-change ${improvement ? 'positive' : 'negative'}">
+            <i class="fas fa-arrow-${arrowDirection}"></i>
+            ${percentValue.toFixed(1)}%
+        </span>`;
+    }
+
+    statsElement.innerHTML = `
+        <div class="stat-item">
+            <span class="stat-label">Current:</span>
+            <span class="stat-value">${formatMetricValue(current, metric)}</span>
+            ${changeText}
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Best:</span>
+            <span class="stat-value">${formatMetricValue(best, metric)}</span>
+            <span class="stat-season">(${bestSeason})</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">Avg:</span>
+            <span class="stat-value">${formatMetricValue(avg, metric)}</span>
+        </div>
+    `;
+}
+
+
+function updateTimelineInfo(data) {
+    const info = document.getElementById('timelineInfo');
+    const seasons = data.trends[0]?.seasons || [];
+    
+    info.innerHTML = `
+        <div class="timeline-summary">
+            <div class="summary-card">
+                <div class="summary-label">Seasons Analyzed</div>
+                <div class="summary-value">${seasons.length}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Metrics Tracked</div>
+                <div class="summary-value">${data.metrics.length}</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Time Range</div>
+                <div class="summary-value">${seasons[0] || 'N/A'} - ${seasons[seasons.length - 1] || 'N/A'}</div>
+            </div>
+        </div>
+    `;
+}
+
+function clearTimeline() {
+    Object.values(timelineCharts).forEach(chart => {
+        if (chart) chart.destroy();
+    });
+    timelineCharts = {};
+    
+    const container = document.getElementById('timelineChartsContainer');
+    if (timelinePlaceholderHTML) {
+        container.innerHTML = timelinePlaceholderHTML;
+    }
+    
+    document.getElementById('timelineInfo').innerHTML = '<p>Select a player, choose metrics, and click "Generate Trends" to visualize performance trends.</p>';
+}
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+    font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--color-text-primary);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-page-bg) 85%, white), var(--color-page-bg));
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.back-button:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.timeline-controls {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    padding: 1.5rem;
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-floating);
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 150px;
+}
+
+.control-group-full {
+    width: 100%;
+    min-width: 100%;
+}
+
+.metrics-selector-container {
+    width: 100%;
+}
+
+.metrics-dropdown-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.metrics-dropdown-trigger {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.metrics-dropdown-trigger:hover {
+    border-color: var(--color-accent);
+    background: var(--color-surface);
+}
+
+.metrics-dropdown-trigger.active {
+    border-color: var(--color-accent);
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.metrics-selected-count {
+    flex: 1;
+    color: var(--color-text-muted);
+}
+
+.metrics-dropdown-trigger.active .metrics-selected-count {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.metrics-dropdown-trigger i {
+    color: var(--color-text-subtle);
+    transition: transform 0.2s ease;
+}
+
+.metrics-dropdown-trigger.active i {
+    transform: rotate(180deg);
+    color: var(--color-accent);
+}
+
+.metrics-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-top: none;
+    border-radius: 0 0 12px 12px;
+    max-height: 500px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: var(--shadow-floating);
+}
+
+.metrics-search {
+    padding: 1rem;
+    border-bottom: 1px solid var(--color-layer-border);
+    position: sticky;
+    top: 0;
+    background: var(--color-layer-card);
+    z-index: 10;
+}
+
+.metrics-search-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+}
+
+.metrics-search-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.metrics-categories {
+    padding: 0.5rem;
+}
+
+.metrics-category {
+    margin-bottom: 1rem;
+}
+
+.metrics-category:last-child {
+    margin-bottom: 0;
+}
+
+.category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: var(--color-layer-soft);
+    border-radius: 10px;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--color-layer-border);
+}
+
+.category-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.category-toggle {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 6px;
+    padding: 0.25rem 0.75rem;
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.category-toggle:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.category-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.metric-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: var(--color-layer-soft);
+    border: 1px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.metric-option:hover {
+    background: color-mix(in srgb, var(--color-layer-soft) 90%, var(--color-surface));
+    border-color: var(--color-border-strong);
+}
+
+.metric-option input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--color-accent);
+    flex-shrink: 0;
+}
+
+.metric-option input[type="checkbox"]:checked + span {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.selected-metrics-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    min-height: 2rem;
+}
+
+.metric-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-accent);
+    border-radius: 6px;
+    color: var(--color-accent);
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.chip-remove {
+    background: none;
+    border: none;
+    color: var(--color-accent);
+    font-size: 1.2rem;
+    cursor: pointer;
+    padding: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    line-height: 1;
+}
+
+.chip-remove:hover {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+}
+
+.player-search-container {
+    position: relative;
+    width: 100%;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    margin-top: 2px;
+}
+
+.player-dropdown-item {
+    padding: 0.75rem 1rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background 0.2s ease;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 80%, var(--color-main-bg));
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+}
+
+.selected-player-display span {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.clear-player-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    color: var(--color-accent);
+}
+
+.control-label {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.control-input {
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+}
+
+.control-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.generate-btn {
+    padding: 0.75rem 2rem;
+    background: var(--color-accent);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    color: var(--color-main-bg);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.generate-btn:hover:not(.disabled) {
+    background: var(--color-accent-bright);
+    border-color: var(--color-accent-bright);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.3);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--color-border);
+    border-color: var(--color-border);
+}
+
+.timeline-container {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 18px;
+    padding: 2rem;
+    box-shadow: var(--shadow-elevated);
+    backdrop-filter: blur(10px);
+}
+
+.timeline-wrapper {
+    width: 100%;
+}
+
+.timeline-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 2px solid var(--color-layer-border);
+}
+
+.timeline-header h2 {
+    font-size: 1.75rem;
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+    font-weight: 700;
+}
+
+
+.timeline-charts-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.chart-card {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+    box-shadow: var(--shadow-floating);
+}
+
+.chart-card:hover {
+    border-color: var(--color-accent);
+    box-shadow: 0 12px 30px var(--color-accent-soft);
+    transform: translateY(-2px);
+}
+
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.chart-header h3 {
+    font-size: 1.1rem;
+    color: var(--color-text-primary);
+    font-weight: 600;
+    margin: 0;
+}
+
+.chart-stats {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+}
+
+.stat-label {
+    color: var(--color-text-muted);
+}
+
+.stat-value {
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+
+.stat-change {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.stat-change.positive {
+    color: color-mix(in srgb, var(--color-success) 80%, #6ee7b7);
+    background: rgba(76, 175, 80, 0.1);
+}
+
+.stat-change.negative {
+    color: var(--color-danger);
+    background: rgba(244, 67, 54, 0.1);
+}
+
+.stat-season {
+    color: var(--color-text-subtle);
+    font-size: 0.75rem;
+}
+
+.chart-card canvas {
+    max-height: 300px;
+}
+
+.timeline-placeholder {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 400px;
+    padding: 3rem;
+}
+
+.placeholder-animation {
+    text-align: center;
+}
+
+.placeholder-wave {
+    width: 100%;
+    max-width: 500px;
+    margin-bottom: 2rem;
+}
+
+.wave-path {
+    animation: waveAnimation 3s ease-in-out infinite;
+}
+
+.wave-delay-1 {
+    animation-delay: 0.5s;
+}
+
+.wave-delay-2 {
+    animation-delay: 1s;
+}
+
+@keyframes waveAnimation {
+    0%, 100% {
+        opacity: 0.3;
+        transform: translateX(0);
+    }
+    50% {
+        opacity: 0.8;
+        transform: translateX(10px);
+    }
+}
+
+.placeholder-text {
+    color: var(--color-text-subtle);
+    font-size: 1.1rem;
+}
+
+.placeholder-text i {
+    font-size: 3rem;
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+
+.timeline-info {
+    padding: 1.25rem 1.5rem;
+    background: var(--color-layer-soft);
+    border-radius: 12px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-floating);
+}
+
+.timeline-info p {
+    color: var(--color-text-muted);
+    margin: 0;
+    text-align: center;
+    font-size: 0.95rem;
+}
+
+.timeline-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.summary-card {
+    background: color-mix(in srgb, var(--color-layer-card) 92%, var(--color-page-bg));
+    border: 1px solid var(--color-layer-border);
+    border-radius: 12px;
+    padding: 1rem;
+    text-align: center;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.summary-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.58);
+    margin-bottom: 0.5rem;
+}
+
+.summary-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--color-accent);
+}
+
+.timeline-info-message {
+    text-align: center;
+    padding: 1rem;
+}
+
+.timeline-info-title {
+    font-size: 1.1rem;
+    color: var(--color-text-primary);
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.timeline-info-text {
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+}
+
+.timeline-info-loading .timeline-info-title {
+    color: var(--color-accent);
+}
+
+.timeline-info-warning .timeline-info-title {
+    color: var(--color-danger);
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+
+    .header-content {
+        flex-direction: column;
+    }
+
+    .timeline-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-group {
+        min-width: 100%;
+    }
+
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .timeline-charts-container {
+        grid-template-columns: 1fr;
+    }
+
+    .generate-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+{% endblock %}
+

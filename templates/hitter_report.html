@@ -1,0 +1,971 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>{{ player }} — Hitter Scouting Report</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    :root{
+      --ink:var(--color-surface-alt); 
+      --muted:#6b7280; 
+      --bg:var(--color-text-primary); 
+      --hair:#e0e0e0; 
+      --card:var(--color-text-primary);
+      --card-bg:#fafafa;
+      --accent:var(--color-surface-alt);
+      --accent-light:#f97316;
+      --accent-orange:#f97316;
+      --accent-orange-light:#fb923c;
+      --border:#d1d5db;
+      --shadow:rgba(0,0,0,0.08);
+      --shadow-light:rgba(0,0,0,0.04);
+      --h-cover: 3.10in;
+      --h-heat:  2.70in;
+      --h-half:  2.70in;
+    }
+
+    html,body{ 
+      margin:0; 
+      background:var(--bg); 
+      color:var(--ink);
+      font:13px/1.6 Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    .page{ 
+      background:var(--card); 
+      box-shadow:0 2px 8px var(--shadow);
+      padding:0.20in 0.25in; 
+      margin:0 auto 10px; 
+      width:100%;
+      page-break-after:always; 
+      break-after:page; 
+    }
+    .page:last-child{ page-break-after:auto; break-after:auto; }
+
+    /* -------- FORCE-FIT for 8+ pitch types --------
+       We scale the inner .w so vertical height shrinks ~6% while width stays visually the same. */
+    .page.compact{ padding:0.12in 0.16in }
+    .page.compact .w{
+      transform: scale(0.94);
+      transform-origin: top center;
+      width: calc(7.7in / 0.94);
+    }
+    .page.compact .h2{ font-size:14px; margin:0 0 0.015in 0 }
+    .page.compact .div{ margin:0.05in 0 0.06in }
+    .page.compact .card{ padding:0.08in }
+    .page.compact .tightpad{ padding:0.08in }
+    .page.compact .grid.g2{ gap:0.04in }
+    .page.compact .heatgrid.two{ grid-template-columns:1.10in 1fr; gap:0.04in; align-items:center }
+    .page.compact .labellist div{ font-size:10px; line-height:1.15; margin:2px 0; white-space:nowrap }
+    .page.compact .img-table img{ max-height:1.80in }
+    .page.compact .img-heat{ height:1.65in }
+    .page.compact .img-half{ height:2.00in }
+
+    /* Compact pitcher pages - fit everything on one page */
+    .page.compact-pitcher{ 
+      padding:0.12in 0.18in;
+    }
+    .page.compact-pitcher .pitcher-header{
+      margin-bottom:0.08in;
+      padding-bottom:0.05in;
+    }
+    .page.compact-pitcher .pitcher-name{
+      font-size:18px;
+      margin-top:0.02in;
+    }
+    .page.compact-pitcher .div{
+      margin:0.06in 0 0.08in;
+    }
+    .page.compact-pitcher .h2{
+      font-size:14px;
+      margin:0 0 0.03in 0;
+    }
+    .page.compact-pitcher .card{
+      padding:0.06in;
+      margin-top:0.05in;
+      margin-bottom:0.08in;
+    }
+    .page.compact-pitcher .w{
+      padding-bottom:0.05in;
+    }
+    .page.compact-pitcher .img-table{
+      height:auto;
+      min-height:0;
+      padding:0;
+    }
+    .page.compact-pitcher .img-table img{
+      max-height:2.5in;
+      width:100%;
+      display:block;
+    }
+    .page.compact-pitcher .imgcard.img-table{
+      padding:0;
+      margin:0;
+    }
+    .page.compact-pitcher .grid.g2{
+      gap:0.05in;
+      margin-top:0.05in;
+    }
+
+    .w{ max-width:7.7in; margin:0 auto; }
+
+    .title{ 
+      font-size:28px; 
+      font-weight:800; 
+      letter-spacing:-0.03em;
+      line-height:1.2;
+      color:var(--ink);
+      margin-bottom:0.04in;
+    }
+
+    .title-subtitle{
+      font-size:14px;
+      color:var(--muted);
+      font-weight:500;
+      margin-top:0.02in;
+      letter-spacing:0.01em;
+    }
+
+    .h1{ 
+      font-size:11px; 
+      font-weight:700; 
+      letter-spacing:0.12em; 
+      text-transform:uppercase; 
+      color:var(--accent);
+      margin-bottom:0.06in;
+      padding-bottom:0.04in;
+      border-bottom:2px solid var(--accent-light);
+      display:inline-block;
+      width:100%;
+    }
+
+    .h2{ 
+      font-size:16px; 
+      font-weight:700; 
+      margin:0 0 0.05in 0;
+      color:var(--ink);
+      letter-spacing:-0.01em;
+    }
+
+    .subtle{ 
+      color:var(--muted);
+      font-size:11px;
+      font-weight:500;
+      text-transform:uppercase;
+      letter-spacing:0.05em;
+      margin-bottom:0.02in;
+    }
+
+    .div{ 
+      height:2px; 
+      background:linear-gradient(to right, var(--accent-light), transparent);
+      margin:0.10in 0 0.12in;
+      border:none;
+    }
+
+    .grid{ display:grid; gap:0.10in }
+    .g2{ grid-template-columns:1fr 1fr }
+
+    .card{ 
+      border:1px solid var(--border); 
+      border-radius:12px; 
+      padding:0.12in; 
+      background:var(--card-bg);
+      box-shadow:0 2px 6px var(--shadow-light);
+      break-inside:avoid; 
+      page-break-inside:avoid;
+      transition:box-shadow 0.2s ease;
+    }
+
+    .tightpad{ padding:0.08in 0.12in 0.06in; }
+
+    .imgcard{ 
+      border:1px solid var(--border); 
+      border-radius:10px; 
+      background:var(--color-text-primary); 
+      overflow:hidden;
+      box-shadow:0 1px 4px var(--shadow-light);
+      break-inside:avoid; 
+      page-break-inside:avoid; 
+    }
+
+    .imgcard img{ 
+      width:100%; 
+      height:100%; 
+      display:block; 
+      object-fit:contain; 
+      object-position:center; 
+    }
+
+    .imgcover{ height:var(--h-cover); }
+    .imgcover img{ height:100%; object-fit:contain; }
+
+    /* Mini-scouting report styling */
+    .mini-scout-section{
+      margin-top:0.10in;
+    }
+
+    .metrics-grid{
+      display:grid;
+      grid-template-columns:repeat(4, 1fr);
+      gap:0.08in;
+      margin-bottom:0.10in;
+    }
+
+    .metric-card{
+      background:var(--card-bg);
+      border:1px solid var(--border);
+      border-radius:6px;
+      padding:0.10in;
+      display:flex;
+      flex-direction:column;
+      gap:0.04in;
+    }
+
+    .metric-label{
+      font-size:9px;
+      font-weight:600;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+    }
+
+    .metric-value{
+      font-size:20px;
+      font-weight:700;
+      color:var(--ink);
+      line-height:1.2;
+    }
+
+    .metric-sublabel{
+      font-size:8px;
+      color:var(--muted);
+    }
+
+
+    .sw-card{
+      background:var(--card-bg);
+      border:1px solid var(--border);
+      border-radius:6px;
+      padding:0.10in;
+    }
+
+    .sw-title{
+      font-size:11px;
+      font-weight:700;
+      color:var(--ink);
+      margin-bottom:0.06in;
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+    }
+
+    .sw-title.strengths{
+      color:#059669;
+    }
+
+    .sw-title.weaknesses{
+      color:#dc2626;
+    }
+
+    .sw-list{
+      list-style:none;
+      padding:0;
+      margin:0;
+    }
+
+    .sw-list li{
+      font-size:9px;
+      color:var(--ink);
+      margin-bottom:0.04in;
+      padding-left:0.08in;
+      position:relative;
+      line-height:1.4;
+    }
+
+    .sw-list li:before{
+      content:"•";
+      position:absolute;
+      left:0;
+      font-weight:bold;
+    }
+
+    .sw-list.strengths li:before{
+      color:#059669;
+    }
+
+    .sw-list.weaknesses li:before{
+      color:#dc2626;
+    }
+
+    .split-metrics{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:0.10in;
+      margin-bottom:0.10in;
+    }
+
+    .split-card{
+      background:var(--card-bg);
+      border:1px solid var(--border);
+      border-radius:6px;
+      padding:0.10in;
+    }
+
+    .split-header{
+      font-size:11px;
+      font-weight:700;
+      color:var(--ink);
+      margin-bottom:0.08in;
+      text-align:center;
+      padding-bottom:0.06in;
+      border-bottom:2px solid var(--border);
+    }
+
+    .split-metrics-grid{
+      display:grid;
+      grid-template-columns:repeat(2, 1fr);
+      gap:0.08in;
+    }
+
+    .split-metric{
+      text-align:center;
+    }
+
+    .split-metric-label{
+      font-size:8px;
+      color:var(--muted);
+      margin-bottom:0.02in;
+      text-transform:uppercase;
+    }
+
+    .split-metric-value{
+      font-size:16px;
+      font-weight:700;
+      color:var(--ink);
+    }
+
+    /* Compact hitter check-in for first page */
+    .hitter-checkin-compact .imgcover{
+      height:2.20in;
+    }
+
+    .hitter-checkin-compact .grid{
+      gap:0.06in;
+    }
+
+    .img-table{ height:auto; }
+    .img-table img{ width:100%; height:auto; display:block; object-fit:contain; }
+
+    .img-heat{ height:var(--h-heat); }
+    .img-heat img{ height:100%; object-fit:contain; }
+
+    .img-half{ height:var(--h-half); }
+    .img-half img{ height:100%; object-fit:contain; }
+
+    .labellist div{ 
+      font-weight:600; 
+      margin:3px 0; 
+      white-space:nowrap;
+      font-size:11px;
+      color:var(--ink);
+    }
+
+    .heatgrid.two{ 
+      display:grid; 
+      grid-template-columns:1.35in 1fr; 
+      gap:0.10in; 
+      align-items:center; 
+    }
+
+    .heatgrid.one{ display:grid; grid-template-columns:1fr; }
+    .heatgrid .imgcard{ justify-self:center; }
+
+    .heatgrid, .g2 { break-inside:avoid; page-break-inside:avoid; }
+
+    /* Header section styling - redesigned */
+    .header-section{
+      margin-bottom:0.18in;
+      padding:0.15in;
+      background:linear-gradient(to bottom, #fafafa 0%, var(--color-text-primary) 100%);
+      border:1px solid var(--border);
+      border-radius:8px;
+      box-shadow:0 2px 8px var(--shadow-light);
+    }
+
+    .header-main{
+      display:flex;
+      align-items:center;
+      gap:0.20in;
+      margin-bottom:0.12in;
+    }
+
+    .header-left{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:0.06in;
+    }
+
+    .header-title-row{
+      display:flex;
+      align-items:baseline;
+      gap:0.12in;
+      flex-wrap:wrap;
+    }
+
+    .header-title{
+      font-size:24px;
+      font-weight:700;
+      color:var(--ink);
+      letter-spacing:-0.01em;
+    }
+
+    .header-date{
+      font-size:13px;
+      font-weight:500;
+      color:var(--muted);
+    }
+
+    .header-vs-row{
+      display:flex;
+      align-items:center;
+      gap:0.10in;
+      margin-top:0.04in;
+    }
+
+    .header-team-badge{
+      display:flex;
+      align-items:center;
+      gap:0.06in;
+      padding:0.04in 0.08in;
+      background:var(--card-bg);
+      border:1px solid var(--border);
+      border-radius:6px;
+    }
+
+    .header-team-badge img{
+      height:0.35in;
+      width:auto;
+      object-fit:contain;
+    }
+
+    .header-team-badge-name{
+      font-size:10px;
+      font-weight:600;
+      color:var(--ink);
+    }
+
+    .header-vs-text{
+      font-size:11px;
+      font-weight:700;
+      color:var(--muted);
+      padding:0 0.04in;
+    }
+
+    .header-right{
+      display:flex;
+      align-items:center;
+      gap:0.10in;
+      flex-shrink:0;
+    }
+
+    .header-headshot{
+      width:1.3in;
+      height:1.3in;
+      border-radius:50%;
+      object-fit:cover;
+      border:3px solid var(--accent-light);
+      box-shadow:0 4px 12px var(--shadow);
+    }
+
+    .header-meta{
+      display:grid;
+      grid-template-columns:repeat(2, 1fr);
+      gap:0.10in;
+      padding-top:0.10in;
+      border-top:1px solid var(--hair);
+    }
+
+    .header-meta-item{
+      display:flex;
+      flex-direction:column;
+      gap:0.02in;
+    }
+
+    .header-meta-label{
+      font-size:7px;
+      font-weight:600;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:0.5px;
+    }
+
+    .header-meta-value{
+      font-size:9px;
+      font-weight:500;
+      color:var(--ink);
+      word-break:break-all;
+      line-height:1.3;
+    }
+
+    .header-team-group{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:0.04in;
+    }
+
+    .header-vs{
+      font-size:16px;
+      font-weight:700;
+      color:var(--muted);
+      padding:0 0.08in;
+      align-self:center;
+    }
+
+    .player-headshot{
+      width:1.1in;
+      height:1.1in;
+      border-radius:50%;
+      object-fit:cover;
+      border:none;
+      box-shadow:0 2px 8px var(--shadow);
+      background:transparent;
+    }
+
+    .team-logo{
+      height:0.75in;
+      width:auto;
+      object-fit:contain;
+      filter:drop-shadow(0 1px 3px var(--shadow-light));
+    }
+
+    .opponent-logo{
+      height:0.75in;
+      width:auto;
+      object-fit:contain;
+      filter:drop-shadow(0 1px 3px var(--shadow-light));
+    }
+
+    .team-label{
+      font-size:10px;
+      font-weight:600;
+      color:var(--muted);
+      text-align:center;
+      max-width:1.2in;
+      line-height:1.2;
+    }
+
+    /* Game info styling */
+    .game-info-grid{
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:0.12in;
+    }
+
+    .game-info-item{
+      margin-bottom:0.08in;
+    }
+
+    .game-info-item:last-child{
+      margin-bottom:0;
+    }
+
+    .game-info-value{
+      font-weight:600;
+      color:var(--ink);
+      font-size:12px;
+      margin-top:0.02in;
+      word-break:break-all;
+    }
+
+    /* Pitcher header styling */
+    .pitcher-header{
+      margin-bottom:0.12in;
+      padding-bottom:0.08in;
+      border-bottom:2px solid var(--accent-light);
+      position:relative;
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+    }
+
+    .pitcher-header-content{
+      flex:1;
+    }
+
+    .pitcher-name{
+      font-size:20px;
+      font-weight:700;
+      color:var(--accent);
+      margin-top:0.04in;
+      letter-spacing:-0.02em;
+    }
+
+    .pitcher-headshot{
+      width:1.0in;
+      height:1.0in;
+      border-radius:50%;
+      object-fit:cover;
+      border:2px solid var(--accent-light);
+      box-shadow:0 2px 8px var(--shadow);
+      flex-shrink:0;
+      margin-left:0.15in;
+    }
+
+    /* Footer styling */
+    .page-footer{
+      text-align:center;
+      padding-top:0.10in;
+      margin-top:0.20in;
+      border-top:1px solid var(--hair);
+    }
+
+    .page-footer img{
+      height:0.25in;
+      width:auto;
+      object-fit:contain;
+    }
+
+    @page { size: Letter; margin: 0.40in; }
+    @media print { 
+      body{ background:var(--color-text-primary) } 
+      .page{ box-shadow:none; margin:0 }
+      .card{ box-shadow:none; border:1px solid var(--color-text-secondary); }
+      .imgcard{ box-shadow:none; border:1px solid var(--color-text-secondary); }
+    }
+  </style>
+</head>
+<body>
+
+  {% set hc = figures.hitter_checkin if figures else None %}
+  <section class="page">
+    <div class="w">
+      <div class="header-section">
+        <div class="header-main">
+          <div class="header-left">
+            <div class="header-title-row">
+              <div class="header-title">{{ player }}</div>
+              <div class="header-date">{{ date }}</div>
+            </div>
+            {% if team_logo_url or opponent_logo_url %}
+            <div class="header-vs-row">
+              {% if team_logo_url %}
+              <div class="header-team-badge">
+                <img src="{{ team_logo_url }}" alt="{{ team_name }}">
+                {% if team_name %}
+                <div class="header-team-badge-name">{{ team_name }}</div>
+                {% endif %}
+              </div>
+              {% endif %}
+              {% if opponent_logo_url %}
+              <div class="header-vs-text">vs</div>
+              <div class="header-team-badge">
+                <img src="{{ opponent_logo_url }}" alt="{{ opponent_name }}">
+                {% if opponent_name %}
+                <div class="header-team-badge-name">{{ opponent_name }}</div>
+                {% endif %}
+              </div>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+          {% if player_headshot_url %}
+          <div class="header-right">
+            <img src="{{ player_headshot_url }}" alt="{{ player }}" class="header-headshot">
+          </div>
+          {% endif %}
+        </div>
+        <div class="header-meta">
+          <div class="header-meta-item">
+            <div class="header-meta-label">Game Date</div>
+            <div class="header-meta-value">{{ game_date }}</div>
+          </div>
+          <div class="header-meta-item">
+            <div class="header-meta-label">Data Window</div>
+            <div class="header-meta-value">{{ season_start }} → {{ game_date }}</div>
+          </div>
+          <div class="header-meta-item">
+            <div class="header-meta-label">Redeem URL</div>
+            <div class="header-meta-value">{{ redeem_url }}</div>
+          </div>
+          <div class="header-meta-item">
+            <div class="header-meta-label">Token</div>
+            <div class="header-meta-value">{{ token }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="div"></div>
+
+      {% if hc %}
+      <div class="mini-scout-section">
+        <div class="h1" style="margin-bottom:0.10in">Hitter Scouting Report</div>
+        
+        {% if hc.overall_metrics %}
+        <div class="metrics-grid">
+          {% if hc.overall_metrics.avg is defined %}
+          <div class="metric-card">
+            <div class="metric-label">Batting Average</div>
+            <div class="metric-value">{{ "%.3f"|format(hc.overall_metrics.avg) }}</div>
+          </div>
+          {% endif %}
+          {% if hc.overall_metrics.ops is defined %}
+          <div class="metric-card">
+            <div class="metric-label">OPS</div>
+            <div class="metric-value">{{ "%.3f"|format(hc.overall_metrics.ops) }}</div>
+          </div>
+          {% endif %}
+          {% if hc.overall_metrics.avg_ev is defined %}
+          <div class="metric-card">
+            <div class="metric-label">Avg Exit Velocity</div>
+            <div class="metric-value">{{ "%.1f"|format(hc.overall_metrics.avg_ev) }}<span class="metric-sublabel"> MPH</span></div>
+          </div>
+          {% endif %}
+          {% if hc.overall_metrics.hard_hit_pct is defined %}
+          <div class="metric-card">
+            <div class="metric-label">Hard Hit %</div>
+            <div class="metric-value">{{ "%.1f"|format(hc.overall_metrics.hard_hit_pct) }}<span class="metric-sublabel">%</span></div>
+          </div>
+          {% endif %}
+          {% if hc.overall_metrics.barrel_pct is defined %}
+          <div class="metric-card">
+            <div class="metric-label">Barrel %</div>
+            <div class="metric-value">{{ "%.1f"|format(hc.overall_metrics.barrel_pct) }}<span class="metric-sublabel">%</span></div>
+          </div>
+          {% endif %}
+          {% if hc.overall_metrics.k_rate is defined %}
+          <div class="metric-card">
+            <div class="metric-label">Strikeout Rate</div>
+            <div class="metric-value">{{ "%.1f"|format(hc.overall_metrics.k_rate * 100) }}<span class="metric-sublabel">%</span></div>
+          </div>
+          {% endif %}
+          {% if hc.overall_metrics.bb_rate is defined %}
+          <div class="metric-card">
+            <div class="metric-label">Walk Rate</div>
+            <div class="metric-value">{{ "%.1f"|format(hc.overall_metrics.bb_rate * 100) }}<span class="metric-sublabel">%</span></div>
+          </div>
+          {% endif %}
+          {% if hc.overall_metrics.whiff_pct is defined %}
+          <div class="metric-card">
+            <div class="metric-label">Whiff Rate</div>
+            <div class="metric-value">{{ "%.1f"|format(hc.overall_metrics.whiff_pct) }}<span class="metric-sublabel">%</span></div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        {% if hc.sw_visual_url %}
+        <div class="card" style="margin-top:0.08in; margin-bottom:0.08in">
+          <div class="h2" style="margin-bottom:0.06in">Performance by Pitch Type</div>
+          <div class="imgcard" style="height:2.5in;">
+            <img src="{{ hc.sw_visual_url }}" alt="Strengths and Weaknesses" style="width:100%; height:100%; object-fit:contain;">
+          </div>
+        </div>
+        {% endif %}
+
+        {% if (hc.rhp_metrics and hc.rhp_metrics|length > 0) or (hc.lhp_metrics and hc.lhp_metrics|length > 0) %}
+        <div class="split-metrics">
+          {% if hc.rhp_metrics and hc.rhp_metrics|length > 0 %}
+          <div class="split-card">
+            <div class="split-header">vs RHP</div>
+            <div class="split-metrics-grid">
+              {% if hc.rhp_metrics.avg is defined %}
+              <div class="split-metric">
+                <div class="split-metric-label">AVG</div>
+                <div class="split-metric-value">{{ "%.3f"|format(hc.rhp_metrics.avg) }}</div>
+              </div>
+              {% endif %}
+              {% if hc.rhp_metrics.ops is defined %}
+              <div class="split-metric">
+                <div class="split-metric-label">OPS</div>
+                <div class="split-metric-value">{{ "%.3f"|format(hc.rhp_metrics.ops) }}</div>
+              </div>
+              {% endif %}
+              {% if hc.rhp_metrics.avg_ev is defined %}
+              <div class="split-metric">
+                <div class="split-metric-label">EV</div>
+                <div class="split-metric-value">{{ "%.1f"|format(hc.rhp_metrics.avg_ev) }}</div>
+              </div>
+              {% endif %}
+              {% if hc.rhp_metrics.hard_hit_pct is defined %}
+              <div class="split-metric">
+                <div class="split-metric-label">Hard Hit%</div>
+                <div class="split-metric-value">{{ "%.1f"|format(hc.rhp_metrics.hard_hit_pct) }}%</div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endif %}
+          {% if hc.lhp_metrics and hc.lhp_metrics|length > 0 %}
+          <div class="split-card">
+            <div class="split-header">vs LHP</div>
+            <div class="split-metrics-grid">
+              {% if hc.lhp_metrics.avg is defined %}
+              <div class="split-metric">
+                <div class="split-metric-label">AVG</div>
+                <div class="split-metric-value">{{ "%.3f"|format(hc.lhp_metrics.avg) }}</div>
+              </div>
+              {% endif %}
+              {% if hc.lhp_metrics.ops is defined %}
+              <div class="split-metric">
+                <div class="split-metric-label">OPS</div>
+                <div class="split-metric-value">{{ "%.3f"|format(hc.lhp_metrics.ops) }}</div>
+              </div>
+              {% endif %}
+              {% if hc.lhp_metrics.avg_ev is defined %}
+              <div class="split-metric">
+                <div class="split-metric-label">EV</div>
+                <div class="split-metric-value">{{ "%.1f"|format(hc.lhp_metrics.avg_ev) }}</div>
+              </div>
+              {% endif %}
+              {% if hc.lhp_metrics.hard_hit_pct is defined %}
+              <div class="split-metric">
+                <div class="split-metric-label">Hard Hit%</div>
+                <div class="split-metric-value">{{ "%.1f"|format(hc.lhp_metrics.hard_hit_pct) }}%</div>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+      </div>
+      {% endif %}
+      <div class="page-footer">
+        <img src="Sequence.png" alt="Sequence">
+      </div>
+    </div>
+  </section>
+
+  {% set names = [] %}
+  {% for key in ['oppo_pitch_movement','oppo_heatmaps','oppo_pitch_mix_by_count','oppo_pitch_tables'] %}
+    {% for it in (figures[key] if figures and figures[key] else []) %}
+      {% if it.name not in names %}{% set _ = names.append(it.name) %}{% endif %}
+    {% endfor %}
+  {% endfor %}
+
+  {% set names = names | sort %}
+
+  {% for name in names %}
+    {% set move = (figures.oppo_pitch_movement | selectattr('name','equalto',name) | list) if figures and figures.oppo_pitch_movement else [] %}
+    {% set heat = (figures.oppo_heatmaps       | selectattr('name','equalto',name) | list) if figures and figures.oppo_heatmaps else [] %}
+    {% set mix  = (figures.oppo_pitch_mix_by_count | selectattr('name','equalto',name) | list) if figures and figures.oppo_pitch_mix_by_count else [] %}
+    {% set tabs = (figures.oppo_pitch_tables   | selectattr('name','equalto',name) | list) if figures and figures.oppo_pitch_tables else [] %}
+    {% set headshots = (figures.oppo_pitcher_headshots | selectattr('name','equalto',name) | list) if figures and figures.oppo_pitcher_headshots else [] %}
+    {% set pitcher_headshot_url = (headshots[0].headshot_url if headshots and headshots[0] else None) %}
+    {% set pitcher_stats = (headshots[0].stats if headshots and headshots[0] and headshots[0].stats else {}) %}
+    {% set want = 'RHH' if (hitter_stand or 'R') == 'R' else 'LHH' %}
+    {% set table_path = (tabs[0][want] if (tabs and tabs[0] and tabs[0][want]) else (tabs[0]['LHH'] if (tabs and tabs[0] and tabs[0]['LHH']) else (tabs[0]['RHH'] if (tabs and tabs[0]) else None))) %}
+    {% set labels = (heat and heat[0].labels) or [] %}
+    {% set pcount = labels|length %}
+    
+    {# Only render page if pitcher has at least one valid visualization #}
+    {% set has_heatmap = (heat and heat[0] and heat[0].path and heat[0].path != '') %}
+    {% set has_table = (tabs and tabs[0] and table_path and table_path != '') %}
+    {% set has_movement = (move and move[0] and move[0].path and move[0].path != '') %}
+    {% set has_mix = (mix and mix[0] and mix[0].path and mix[0].path != '') %}
+    {% if has_heatmap or has_table or has_movement or has_mix %}
+
+    {# More aggressive sizing to fit everything on one page #}
+    {% set HEAT_H = '2.20in' %}
+    {% set HALF_H = '2.20in' %}
+    {% set TABLE_H = 'auto' %}
+    {% set GAP    = '0.06in' %}
+    {% set PAD    = '0.08in' %}
+    {% if pcount >= 4 %}{% set HEAT_H = '1.90in' %}{% set HALF_H = '2.00in' %}{% endif %}
+    {% if pcount >= 5 %}{% set HEAT_H = '1.70in' %}{% set HALF_H = '1.85in' %}{% set GAP='0.05in' %}{% set PAD='0.06in' %}{% endif %}
+    {% if pcount >= 6 %}{% set HEAT_H = '1.50in' %}{% set HALF_H = '1.70in' %}{% set GAP='0.04in' %}{% set PAD='0.06in' %}{% endif %}
+    {% if pcount >= 7 %}{% set HEAT_H = '1.35in' %}{% set HALF_H = '1.55in' %}{% set GAP='0.03in' %}{% set PAD='0.05in' %}{% endif %}
+    {% if pcount >= 8 %}{% set HEAT_H = '1.20in' %}{% set HALF_H = '1.40in' %}{% set GAP='0.03in' %}{% set PAD='0.05in' %}{% endif %}
+
+    <section class="page compact-pitcher">
+      <div class="w">
+        <div class="pitcher-header">
+          <div class="pitcher-header-content">
+            <div class="h1">Opposing Pitcher</div>
+            <div class="pitcher-name">{{ name }}</div>
+            {% if pitcher_stats and (pitcher_stats.handedness or pitcher_stats.age or pitcher_stats.wins or pitcher_stats.ip or pitcher_stats.era or pitcher_stats.whip or pitcher_stats.strikeouts) %}
+            <div class="pitcher-stats" style="display:flex; flex-wrap:wrap; gap:0.15in; margin-top:0.06in; font-size:9.5px; color:var(--muted); line-height:1.4;">
+              {% if pitcher_stats.handedness is not none and pitcher_stats.handedness != '' %}
+              <span><strong>{{ pitcher_stats.handedness }}</strong></span>
+              {% endif %}
+              {% if pitcher_stats.age is not none and pitcher_stats.age != '' %}
+              <span><strong>Age:</strong> {{ pitcher_stats.age }}</span>
+              {% endif %}
+              {% if pitcher_stats.wins is not none and pitcher_stats.losses is not none and pitcher_stats.wins != '' and pitcher_stats.losses != '' %}
+              <span><strong>W-L:</strong> {{ pitcher_stats.wins }}-{{ pitcher_stats.losses }}</span>
+              {% endif %}
+              {% if pitcher_stats.ip is not none and pitcher_stats.ip != '' %}
+              <span><strong>IP:</strong> {{ "%.1f"|format(pitcher_stats.ip|float) }}</span>
+              {% endif %}
+              {% if pitcher_stats.era is not none and pitcher_stats.era != '' %}
+              <span><strong>ERA:</strong> {{ "%.2f"|format(pitcher_stats.era|float) }}</span>
+              {% endif %}
+              {% if pitcher_stats.whip is not none and pitcher_stats.whip != '' %}
+              <span><strong>WHIP:</strong> {{ "%.2f"|format(pitcher_stats.whip|float) }}</span>
+              {% endif %}
+              {% if pitcher_stats.strikeouts is not none and pitcher_stats.strikeouts != '' %}
+              <span><strong>Ks:</strong> {{ pitcher_stats.strikeouts }}</span>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+          {% if pitcher_headshot_url %}
+          <img src="{{ pitcher_headshot_url }}" alt="{{ name }}" class="pitcher-headshot">
+          {% endif %}
+        </div>
+        <div class="div"></div>
+
+        <div class="card tightpad" style="padding: {{ PAD }}; margin-bottom:0.08in;">
+          <div class="h2" style="margin-bottom:0.06in;">Pitch Table — vs {{ 'RHH' if (hitter_stand or 'R') == 'R' else 'LHH' }}</div>
+          <div class="imgcard img-table" style="padding:0; margin:0;">
+            <img src="{{ table_path or '' }}" alt="{{ name }} table" style="max-height:2.5in; width:100%; display:block;">
+          </div>
+        </div>
+
+        <div class="card" style="padding: {{ PAD }}; margin-bottom:0.08in;">
+          <div class="h2" style="margin-bottom:0.06in;">Heatmaps (by Count)</div>
+          {% if labels and labels|length > 0 %}
+            <div class="heatgrid two" style="gap: {{ GAP }};">
+              <div class="labellist">
+                {% for line in labels %}<div>{{ line }}</div>{% endfor %}
+              </div>
+              <div class="imgcard img-heat" style="height: {{ HEAT_H }};">
+                <img src="{{ (heat and heat[0].path) or '' }}" alt="{{ name }} heatmaps">
+              </div>
+            </div>
+          {% else %}
+            <div class="heatgrid one" style="gap: {{ GAP }};">
+              <div class="imgcard img-heat" style="height: {{ HEAT_H }};">
+                <img src="{{ (heat and heat[0].path) or '' }}" alt="{{ name }} heatmaps">
+              </div>
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="grid g2" style="gap: {{ GAP }}; margin-bottom:0;">
+          <div class="card" style="padding: {{ PAD }}; margin-bottom:0;">
+            <div class="h2" style="margin-bottom:0.06in;">Pitch Mix by Count</div>
+            <div class="imgcard img-half" style="height: {{ HALF_H }};">
+              <img src="{{ (mix and mix[0].path) or '' }}" alt="{{ name }} mix by count">
+            </div>
+          </div>
+          <div class="card" style="padding: {{ PAD }}; margin-bottom:0;">
+            <div class="h2" style="margin-bottom:0.06in;">Movement</div>
+            <div class="imgcard img-half" style="height: {{ HALF_H }};">
+              <img src="{{ (move and move[0].path) or '' }}" alt="{{ name }} movement">
+            </div>
+          </div>
+        </div>
+        <div class="page-footer">
+          <img src="Sequence.png" alt="Sequence">
+        </div>
+      </div>
+    </section>
+    {% endif %}
+  {% endfor %}
+</body>
+</html>

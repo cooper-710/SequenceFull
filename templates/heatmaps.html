@@ -1,0 +1,2080 @@
+{% extends "base.html" %}
+{% from 'partials/idle_placeholder.html' import idle_placeholder %}
+{% block title %}Heatmaps - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Heatmaps</h1>
+                <p class="page-subtitle">Visualize player performance metrics and statistical distributions</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="heatmap-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Player Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="playerSearch" 
+                        class="control-input" 
+                        placeholder="Type to search players..."
+                        autocomplete="off"
+                    >
+                    <div id="playerSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedPlayerDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedPlayerName"></span>
+                    <button id="clearPlayer" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Metric</label>
+                <select id="metricSelect" class="control-select">
+                    <option value="WAR">WAR</option>
+                    <option value="HR">Home Runs</option>
+                    <option value="RBI">RBI</option>
+                    <option value="AVG">Batting Average</option>
+                    <option value="xwOBA">xwOBA</option>
+                    <option value="xSLG">xSLG</option>
+                    <option value="wRC+">wRC+</option>
+                    <option value="OPS">OPS</option>
+                    <option value="SLG">SLG</option>
+                    <option value="OBP">OBP</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Count</label>
+                <select id="countSelect" class="control-select">
+                    <option value="">All Counts</option>
+                    <option value="0-0">0-0</option>
+                    <option value="1-0">1-0</option>
+                    <option value="0-1">0-1</option>
+                    <option value="1-1">1-1</option>
+                    <option value="2-0">2-0</option>
+                    <option value="2-1">2-1</option>
+                    <option value="1-2">1-2</option>
+                    <option value="2-2">2-2</option>
+                    <option value="3-0">3-0</option>
+                    <option value="3-1">3-1</option>
+                    <option value="3-2">3-2</option>
+                    <option value="0-2">0-2</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label" id="handednessLabel">Pitcher Handedness</label>
+                <select id="pitcherHandSelect" class="control-select">
+                    <option value="">All</option>
+                    <option value="R">Right</option>
+                    <option value="L">Left</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Pitch Type</label>
+                <select id="pitchTypeSelect" class="control-select">
+                    <option value="">All Types</option>
+                    <option value="FF">Four-Seam Fastball</option>
+                    <option value="FT">Two-Seam Fastball</option>
+                    <option value="SI">Sinker</option>
+                    <option value="FC">Cutter</option>
+                    <option value="SL">Slider</option>
+                    <option value="ST">Sweeper</option>
+                    <option value="CU">Curveball</option>
+                    <option value="KC">Knuckle Curve</option>
+                    <option value="CH">Changeup</option>
+                    <option value="FS">Splitter</option>
+                    <option value="SV">Slurve</option>
+                    <option value="KN">Knuckleball</option>
+                    <option value="EP">Eephus</option>
+                </select>
+            </div>
+
+            <button id="generateHeatmap" class="generate-btn" type="button">
+                <i class="fas fa-fire"></i> Generate Heatmap
+            </button>
+        </div>
+
+        <!-- Heatmap Visualization -->
+        <div class="heatmap-container">
+            <div class="heatmap-wrapper">
+                <canvas id="heatmapCanvas" style="max-width: 100%; height: 500px;"></canvas>
+                <div id="heatmapTooltip" class="heatmap-tooltip" style="display: none;"></div>
+                {{ idle_placeholder('heatmapPlaceholder') }}
+            </div>
+            <div id="heatmapInfo" class="heatmap-info">
+                <p>Select a player, choose a metric, and click "Generate Heatmap" to visualize the data.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Color stops for heatmap gradient (blue -> green -> yellow -> red) - matching report generation
+const HEATMAP_COLOR_STOPS = [
+    { stop: 0.0, color: [0, 0, 255] },      // Blue (low)
+    { stop: 0.33, color: [0, 255, 0] },     // Green
+    { stop: 0.66, color: [255, 255, 0] },   // Yellow
+    { stop: 1.0, color: [255, 0, 0] }       // Red (high)
+];
+
+function buildHeatmapRenderState(ctx, canvas, data, infoElement) {
+    const gridSize = data.grid_size || 12;
+    const summary = data.summary || {};
+    const wrapper = canvas.parentElement;
+    const maxAvailableWidth = wrapper ? wrapper.clientWidth : canvas.clientWidth || 640;
+    // Make heatmap larger and better proportioned - centered without batter
+    const heatmapSize = Math.min(Math.max(550, maxAvailableWidth * 0.8), 750);
+    const displayWidth = heatmapSize;
+    const displayHeight = heatmapSize;
+    const dpr = window.devicePixelRatio || 1;
+
+    canvas.width = displayWidth * dpr;
+    canvas.height = displayHeight * dpr;
+    canvas.style.width = '100%';
+    canvas.style.maxWidth = `${displayWidth}px`;
+    canvas.style.height = `${displayHeight}px`;
+
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+
+    // Adjust padding to account for color scale at top - centered layout
+    const topPadding = 100; // Space for color scale bar and title at top
+    const sidePadding = Math.max(50, heatmapSize * 0.1);
+    const padding = sidePadding;
+    const heatmapStartX = 0; // Centered, no offset
+    const drawWidth = heatmapSize - (padding * 2);
+    const drawHeight = heatmapSize - (padding * 2);
+    const heatmapStartY = topPadding; // Start heatmap below color scale
+    const cellWidth = drawWidth / gridSize;
+    const cellHeight = drawHeight / gridSize;
+
+    const cellMatrix = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
+    const values = [];
+
+    (data.grid || []).forEach(cell => {
+        if (cell.x === undefined || cell.y === undefined) {
+            return;
+        }
+        const x = cell.x;
+        const y = cell.y;
+        if (x < 0 || x >= gridSize || y < 0 || y >= gridSize) {
+            return;
+        }
+        const stored = {
+            value: cell.value,
+            count: cell.count ?? cell.pitch_count ?? 0,
+            x,
+            y,
+            x_center: cell.x_center,
+            z_center: cell.z_center
+        };
+        cellMatrix[y][x] = stored;
+        if (cell.value !== null && cell.value !== undefined && !Number.isNaN(cell.value)) {
+            values.push(Number(cell.value));
+        }
+    });
+
+    const minValue = values.length ? Math.min(...values) : 0;
+    const maxValue = values.length ? Math.max(...values) : minValue + 1;
+    const valueRange = maxValue - minValue || 1;
+
+    const valueMatrix = cellMatrix.map(row =>
+        row.map(cell =>
+            (cell && cell.value !== null && cell.value !== undefined) ? Number(cell.value) : minValue
+        )
+    );
+
+    const offscreenWidth = Math.max(1, Math.round(drawWidth));
+    const offscreenHeight = Math.max(1, Math.round(drawHeight));
+    const fieldCanvas = document.createElement('canvas');
+    fieldCanvas.width = offscreenWidth;
+    fieldCanvas.height = offscreenHeight;
+    const fieldCtx = fieldCanvas.getContext('2d');
+    const imageData = fieldCtx.createImageData(offscreenWidth, offscreenHeight);
+    const pixelData = imageData.data;
+    const maxIndex = gridSize - 1;
+
+    // Enhanced smoothing with improved interpolation for better visual quality
+    for (let py = 0; py < offscreenHeight; py++) {
+        const gy = maxIndex * (py / Math.max(1, offscreenHeight - 1));
+        const y0 = Math.floor(gy);
+        const y1 = Math.min(maxIndex, y0 + 1);
+        const ty = gy - y0;
+        // Enhanced smoothstep for smoother transitions
+        const tySmooth = ty * ty * ty * (ty * (ty * 6 - 15) + 10); // Smootherstep (5th order)
+
+        for (let px = 0; px < offscreenWidth; px++) {
+            const gx = maxIndex * (px / Math.max(1, offscreenWidth - 1));
+            const x0 = Math.floor(gx);
+            const x1 = Math.min(maxIndex, x0 + 1);
+            const tx = gx - x0;
+            // Enhanced smoothstep for smoother transitions
+            const txSmooth = tx * tx * tx * (tx * (tx * 6 - 15) + 10); // Smootherstep (5th order)
+
+            const v00 = valueMatrix[y0][x0];
+            const v10 = valueMatrix[y0][x1];
+            const v01 = valueMatrix[y1][x0];
+            const v11 = valueMatrix[y1][x1];
+
+            // Use smootherstep for better interpolation
+            const top = lerp(v00, v10, txSmooth);
+            const bottom = lerp(v01, v11, txSmooth);
+            const value = lerp(top, bottom, tySmooth);
+            const normalized = clamp((value - minValue) / valueRange, 0, 1);
+            const [r, g, b] = interpolateColor(HEATMAP_COLOR_STOPS, normalized);
+            const idx = (py * offscreenWidth + px) * 4;
+            pixelData[idx] = r;
+            pixelData[idx + 1] = g;
+            pixelData[idx + 2] = b;
+            pixelData[idx + 3] = 255;
+        }
+    }
+
+    fieldCtx.putImageData(imageData, 0, 0);
+
+    updateHeatmapSummary(infoElement, data.metric || 'Metric', summary, data);
+
+    return {
+        ctx,
+        canvas,
+        data,
+        summary,
+        gridSize,
+        padding,
+        drawWidth,
+        drawHeight,
+        displayWidth,
+        displayHeight,
+        dpr,
+        minValue,
+        maxValue,
+        valueRange,
+        cellWidth,
+        cellHeight,
+        fieldCanvas,
+        cellMatrix,
+        valueMatrix,
+        metric: data.metric || 'Metric',
+        filters: data.filters || {},
+        title: data.player || 'Player',
+        activeHighlight: null,
+        heatmapStartX: heatmapStartX,
+        heatmapStartY: heatmapStartY
+    };
+}
+
+function drawHeatmapCanvas(state, highlight = undefined) {
+    if (!state) {
+        return;
+    }
+
+    if (highlight !== undefined) {
+        state.activeHighlight = highlight;
+    }
+
+    const { ctx, displayWidth, displayHeight, padding, drawWidth, drawHeight, fieldCanvas } = state;
+    const highlightCell = state.activeHighlight;
+
+    ctx.clearRect(0, 0, displayWidth, displayHeight);
+
+    // Theme-aware background fill
+    ctx.fillStyle = cssVar('--color-layer-soft', '#101010');
+    ctx.fillRect(0, 0, displayWidth, displayHeight);
+    
+    // Calculate heatmap position (centered)
+    const heatmapStartX = state.heatmapStartX || 0;
+    const heatmapStartY = state.heatmapStartY || state.padding || padding;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    // Draw the heatmap offset for batter
+    ctx.drawImage(fieldCanvas, heatmapStartX + padding, heatmapStartY, drawWidth, drawHeight);
+    ctx.restore();
+
+    if (highlightCell) {
+        const { cellX, cellY } = highlightCell;
+        const heatmapStartX = state.heatmapStartX || 0;
+        const heatmapStartY = state.padding || padding;
+        const highlightX = heatmapStartX + padding + (cellX * state.cellWidth);
+        const highlightY = heatmapStartY + (cellY * state.cellHeight);
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+        ctx.fillRect(highlightX, highlightY, state.cellWidth, state.cellHeight);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.lineWidth = 1.6;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(highlightX + 0.4, highlightY + 0.4, state.cellWidth - 0.8, state.cellHeight - 0.8);
+        ctx.restore();
+    }
+
+    // Draw elements in order: background, heatmap, strike zone, color scale, title
+    drawStrikeZoneOverlay(state);
+    drawAxesLabels(state);
+    drawColorScaleBar(state);
+    drawHeatmapTitle(state);
+}
+
+function drawStrikeZoneOverlay(state) {
+    const { ctx, padding, drawWidth, drawHeight, displayWidth, data, heatmapStartX, heatmapStartY } = state;
+    
+    // MLB strike zone dimensions in feet
+    // Width: 17 inches = 1.4167 feet (from -0.7083 to 0.7083 from center)
+    // Height: typically 1.5 to 3.5 feet (standard zone)
+    const strikeZoneWidthFeet = 1.4167;
+    const strikeZoneHeightFeet = 2.0; // 1.5 to 3.5 feet
+    const strikeZoneBottomFeet = 1.5;
+    const strikeZoneTopFeet = 3.5;
+    
+    // Coordinate ranges from API
+    const xRange = data.x_range || [-2.0, 2.0];
+    const zRange = data.z_range || [0.5, 4.5];
+    const xSpan = xRange[1] - xRange[0]; // 4.0 feet
+    const zSpan = zRange[1] - zRange[0]; // 4.0 feet
+    
+    // Calculate strike zone position and size in pixels
+    // Strike zone X: centered at 0, from -0.7083 to 0.7083
+    const strikeZoneLeftFeet = -0.7083;
+    const strikeZoneRightFeet = 0.7083;
+    const strikeZoneXPercent = (strikeZoneLeftFeet - xRange[0]) / xSpan;
+    const strikeZoneWidthPercent = (strikeZoneRightFeet - strikeZoneLeftFeet) / xSpan;
+    
+    // Strike zone Z: from 1.5 to 3.5 feet
+    const strikeZoneBottomPercent = (strikeZoneBottomFeet - zRange[0]) / zSpan;
+    const strikeZoneHeightPercent = (strikeZoneTopFeet - strikeZoneBottomFeet) / zSpan;
+    
+    // Convert to canvas coordinates (note: y-axis is flipped in display)
+    const zoneX = heatmapStartX + padding + drawWidth * strikeZoneXPercent;
+    const zoneY = heatmapStartY + drawHeight * (1 - strikeZoneBottomPercent - strikeZoneHeightPercent);
+    const zoneWidth = drawWidth * strikeZoneWidthPercent;
+    const zoneHeight = drawHeight * strikeZoneHeightPercent;
+
+    // Draw strike zone outline - matching target image style (solid inner, dashed outer)
+    ctx.save();
+    
+    // Inner solid white square (like target image)
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)'; // More visible solid square
+    ctx.strokeRect(zoneX, zoneY, zoneWidth, zoneHeight);
+    
+    // Outer dashed rectangle (like target image)
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]); // Longer dashes for better visibility
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; // More visible dashed outline
+    const outerPadding = 8; // Space between solid and dashed
+    ctx.strokeRect(zoneX - outerPadding, zoneY - outerPadding, zoneWidth + outerPadding * 2, zoneHeight + outerPadding * 2);
+    
+    ctx.restore();
+
+    // Draw home plate - HUGE UPGRADE with much better visibility and design
+    // MLB home plate: 17 inches wide at the top, 8.5 inches deep
+    const plateWidthFeet = 1.4167; // 17 inches
+    const plateDepthFeet = 0.7083; // 8.5 inches
+    const plateWidth = drawWidth * (plateWidthFeet / xSpan);
+    const plateDepth = drawHeight * (plateDepthFeet / zSpan);
+    
+    const plateCenterX = heatmapStartX + padding + drawWidth / 2;
+    const plateTop = heatmapStartY + drawHeight - 12; // Position from top of plate
+    
+    // Draw home plate with flat top and pointed bottom - MUCH MORE VISIBLE
+    ctx.save();
+    
+    // Larger, more prominent plate
+    const topLeft = plateCenterX - plateWidth / 2;
+    const topRight = plateCenterX + plateWidth / 2;
+    const rightBottom = plateTop + plateDepth * 0.5;
+    const platePoint = plateTop + plateDepth;
+    
+    // Outer glow effect for better visibility
+    ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    
+    // Main plate fill with stronger opacity
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+    ctx.beginPath();
+    ctx.moveTo(topLeft, plateTop);
+    ctx.lineTo(topRight, plateTop);
+    ctx.lineTo(topRight, rightBottom);
+    ctx.lineTo(plateCenterX, platePoint);
+    ctx.lineTo(topLeft, rightBottom);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Thick, prominent outline
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineJoin = 'miter';
+    ctx.lineCap = 'square';
+    ctx.beginPath();
+    ctx.moveTo(topLeft, plateTop);
+    ctx.lineTo(topRight, plateTop);
+    ctx.lineTo(topRight, rightBottom);
+    ctx.lineTo(plateCenterX, platePoint);
+    ctx.lineTo(topLeft, rightBottom);
+    ctx.closePath();
+    ctx.stroke();
+    
+    // Inner highlight for 3D effect
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.beginPath();
+    ctx.moveTo(topLeft + 3, plateTop + 2);
+    ctx.lineTo(topRight - 3, plateTop + 2);
+    ctx.stroke();
+    
+    // Add subtle side highlights
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.beginPath();
+    ctx.moveTo(topRight - 2, plateTop + 2);
+    ctx.lineTo(topRight - 2, rightBottom - 2);
+    ctx.moveTo(topLeft + 2, plateTop + 2);
+    ctx.lineTo(topLeft + 2, rightBottom - 2);
+    ctx.stroke();
+    
+    ctx.restore();
+}
+
+function drawAxesLabels(state) {
+    // Axes labels removed as requested
+    // The visualization is now cleaner without text labels
+}
+
+function drawHeatmapTitle(state) {
+    const { ctx, displayWidth, drawWidth, metric, filters, heatmapStartX, padding } = state;
+    // Center title over the heatmap area - cleaner, more readable
+    const heatmapCenterX = heatmapStartX ? (heatmapStartX + padding + drawWidth / 2) : (displayWidth / 2);
+    const titleParts = [metric]; // Just show the metric name, cleaner
+
+    if (filters && filters.season) {
+        titleParts.push(`Season ${filters.season}`);
+    }
+    if (filters && filters.pitcher_hand) {
+        titleParts.push(filters.pitcher_hand === 'R' ? 'vs RHP' : 'vs LHP');
+    }
+    if (filters && filters.pitch_type) {
+        titleParts.push(filters.pitch_type);
+    }
+
+    ctx.save();
+    ctx.fillStyle = 'var(--color-text-primary)';
+    ctx.font = '700 20px "Inter", "Segoe UI", sans-serif'; // Larger, bolder for better readability
+    ctx.textAlign = 'center';
+    // Position title below the color scale bar
+    ctx.fillText(titleParts.join('  |  '), heatmapCenterX, 75);
+    ctx.restore();
+}
+
+function drawColorScaleBar(state) {
+    const { ctx, padding, drawWidth, drawHeight, displayWidth, minValue, maxValue, metric } = state;
+    // Calculate heatmap position (centered)
+    const heatmapStartX = state.heatmapStartX || 0;
+    
+    // Horizontal color bar at the top - matching target image style
+    const barHeight = 28;
+    const barWidth = drawWidth * 0.7; // 70% of heatmap width for better visibility
+    const barX = heatmapStartX + padding + (drawWidth - barWidth) / 2; // Center horizontally
+    const barY = 20; // Top of canvas
+
+    // Create horizontal gradient (left to right: blue to red)
+    const gradient = ctx.createLinearGradient(barX, barY, barX + barWidth, barY);
+    HEATMAP_COLOR_STOPS.forEach(({ stop, color }) => {
+        gradient.addColorStop(stop, `rgba(${color[0]}, ${color[1]}, ${color[2]}, 1)`);
+    });
+
+    // Draw the color bar - cleaner, more prominent
+    ctx.save();
+    ctx.fillStyle = gradient;
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+    ctx.restore();
+
+    // Label above the bar - larger, more readable
+    ctx.save();
+    ctx.fillStyle = 'var(--color-text-primary)';
+    ctx.font = '700 16px "Inter", "Segoe UI", sans-serif'; // Larger, bolder
+    ctx.textAlign = 'center';
+    ctx.fillText(metric || 'Metric', barX + barWidth / 2, barY - 8);
+    ctx.restore();
+
+    // Value labels above the bar (like target image) - improved readability
+    ctx.save();
+    ctx.fillStyle = 'var(--color-text-primary)';
+    ctx.font = '600 12px "Inter", "Segoe UI", sans-serif'; // Larger, bolder
+    ctx.textAlign = 'center';
+    
+    // Calculate three evenly spaced values: min, mid, max
+    const midValue = (minValue + maxValue) / 2;
+    
+    // Left label (min) - above the bar
+    ctx.fillText(formatMetric(minValue), barX, barY - 25);
+    
+    // Middle label - above the bar
+    ctx.fillText(formatMetric(midValue), barX + barWidth / 2, barY - 25);
+    
+    // Right label (max) - above the bar
+    ctx.fillText(formatMetric(maxValue), barX + barWidth, barY - 25);
+    ctx.restore();
+}
+
+function updateHeatmapSummary(infoElement, metric, summary, data) {
+    const cards = [
+        { label: 'Grid Cells', value: formatCount(summary.total_cells ?? data.grid?.length ?? '--') },
+        { label: 'Total Pitches', value: formatCount(summary.total_pitches ?? 0) },
+        { label: `Min ${metric}`, value: formatMetric(summary.min_value) },
+        { label: `Max ${metric}`, value: formatMetric(summary.max_value) },
+        { label: `Avg ${metric}`, value: formatMetric(summary.avg_value) }
+    ];
+
+    infoElement.innerHTML = `
+        <div class="heatmap-summary">
+            ${cards.map(card => `
+                <div class="heatmap-summary-card">
+                    <div class="heatmap-summary-label">${card.label}</div>
+                    <div class="heatmap-summary-value">${card.value}</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function handleHeatmapMouseMove(event) {
+    const canvas = document.getElementById('heatmapCanvas');
+    if (!heatmapRenderState || !canvas) {
+        return;
+    }
+
+    const state = heatmapRenderState;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = state.displayWidth / rect.width;
+    const scaleY = state.displayHeight / rect.height;
+    const canvasX = (event.clientX - rect.left) * scaleX;
+    const canvasY = (event.clientY - rect.top) * scaleY;
+
+    // Calculate heatmap position (offset for batter)
+    const heatmapStartX = state.heatmapStartX || 0;
+    const heatmapStartY = state.padding || state.padding;
+
+    const insideHeatmap = (
+        canvasX >= heatmapStartX + state.padding &&
+        canvasX <= heatmapStartX + state.padding + state.drawWidth &&
+        canvasY >= heatmapStartY &&
+        canvasY <= heatmapStartY + state.drawHeight
+    );
+
+    if (!insideHeatmap) {
+        handleHeatmapMouseLeave();
+        return;
+    }
+    
+    const cellX = Math.min(state.gridSize - 1, Math.max(0, Math.floor((canvasX - heatmapStartX - state.padding) / state.cellWidth)));
+    const cellY = Math.min(state.gridSize - 1, Math.max(0, Math.floor((canvasY - heatmapStartY) / state.cellHeight)));
+
+    const isSameCell = state.activeHighlight && state.activeHighlight.cellX === cellX && state.activeHighlight.cellY === cellY;
+
+    if (!isSameCell) {
+        if (hoverAnimationFrame) {
+            cancelAnimationFrame(hoverAnimationFrame);
+        }
+        hoverAnimationFrame = requestAnimationFrame(() => {
+            drawHeatmapCanvas(state, { cellX, cellY });
+            hoverAnimationFrame = null;
+        });
+    }
+
+    updateHeatmapTooltip(event, state, cellX, cellY);
+}
+
+// Make it globally available
+window.handleHeatmapMouseMove = handleHeatmapMouseMove;
+
+function handleHeatmapMouseLeave() {
+    if (!heatmapRenderState) {
+        return;
+    }
+
+    if (hoverAnimationFrame) {
+        cancelAnimationFrame(hoverAnimationFrame);
+        hoverAnimationFrame = null;
+    }
+
+    drawHeatmapCanvas(heatmapRenderState, null);
+    hideHeatmapTooltip();
+}
+
+// Make it globally available
+window.handleHeatmapMouseLeave = handleHeatmapMouseLeave;
+
+function updateHeatmapTooltip(event, state, cellX, cellY) {
+    const tooltip = document.getElementById('heatmapTooltip');
+    const canvas = document.getElementById('heatmapCanvas');
+    if (!tooltip || !canvas) {
+        return;
+    }
+
+    const cellData = state.cellMatrix[cellY][cellX];
+    const hasData = cellData && cellData.value !== null && cellData.value !== undefined;
+    const valueText = hasData ? formatMetric(cellData.value) : 'No data';
+    const countText = formatCount(cellData?.count ?? 0);
+    const locationText = (cellData && cellData.x_center !== undefined && cellData.z_center !== undefined)
+        ? `(${Number(cellData.x_center).toFixed(2)}, ${Number(cellData.z_center).toFixed(2)})`
+        : `Cell ${cellX + 1}, ${state.gridSize - cellY}`;
+
+    tooltip.innerHTML = `
+        <div class="heatmap-tooltip-title">${state.metric}</div>
+        <div class="heatmap-tooltip-value">${valueText}</div>
+        <div class="heatmap-tooltip-metric">Pitches: ${countText}</div>
+        <div class="heatmap-tooltip-metric">Location: ${locationText}</div>
+    `;
+
+    const wrapperRect = canvas.parentElement.getBoundingClientRect();
+    const offsetX = 15; // Offset to the right of cursor
+    const offsetY = 10; // Offset above cursor
+    
+    // Position tooltip initially to get its dimensions
+    tooltip.style.left = '0px';
+    tooltip.style.top = '0px';
+    tooltip.style.display = 'block';
+    tooltip.style.opacity = '0'; // Invisible but still taking space
+    
+    const tooltipRect = tooltip.getBoundingClientRect();
+    
+    let tooltipX = event.clientX - wrapperRect.left + offsetX;
+    let tooltipY = event.clientY - wrapperRect.top - offsetY;
+    
+    // Ensure tooltip doesn't go off-screen to the right
+    const maxX = wrapperRect.width - tooltipRect.width - 10;
+    if (tooltipX > maxX) {
+        tooltipX = event.clientX - wrapperRect.left - offsetX - tooltipRect.width;
+    }
+    
+    // Ensure tooltip doesn't go off-screen at the top
+    if (tooltipY < tooltipRect.height + 10) {
+        tooltipY = event.clientY - wrapperRect.top + offsetY + 20;
+    }
+    
+    tooltip.style.left = `${tooltipX}px`;
+    tooltip.style.top = `${tooltipY}px`;
+    tooltip.style.opacity = ''; // Reset to use CSS transition
+    requestAnimationFrame(() => tooltip.classList.add('visible'));
+}
+
+function hideHeatmapTooltip() {
+    const tooltip = document.getElementById('heatmapTooltip');
+    if (!tooltip) {
+        return;
+    }
+    tooltip.classList.remove('visible');
+    tooltip.style.display = 'none';
+}
+
+// Make it globally available
+window.hideHeatmapTooltip = hideHeatmapTooltip;
+
+function interpolateColor(stops, t) {
+    const clamped = clamp(t, 0, 1);
+    for (let i = 0; i < stops.length - 1; i++) {
+        const current = stops[i];
+        const next = stops[i + 1];
+        if (clamped >= current.stop && clamped <= next.stop) {
+            const localT = (clamped - current.stop) / (next.stop - current.stop);
+            return [
+                Math.round(lerp(current.color[0], next.color[0], localT)),
+                Math.round(lerp(current.color[1], next.color[1], localT)),
+                Math.round(lerp(current.color[2], next.color[2], localT))
+            ];
+        }
+    }
+    const lastColor = stops[stops.length - 1].color;
+    return [lastColor[0], lastColor[1], lastColor[2]];
+}
+
+function lerp(a, b, t) {
+    return a + (b - a) * t;
+}
+
+function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+}
+
+function cssVar(name, fallback = '#000000') {
+    const computed = getComputedStyle(document.body).getPropertyValue(name);
+    if (!computed) {
+        return fallback;
+    }
+    const trimmed = computed.trim();
+    return trimmed.length ? trimmed : fallback;
+}
+
+function formatMetric(value) {
+    if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return 'N/A';
+    }
+    return Number(value).toFixed(3);
+}
+
+function formatCount(value) {
+    if (value === null || value === undefined || value === '--') {
+        return '--';
+    }
+    const num = Number(value);
+    if (Number.isNaN(num)) {
+        return String(value);
+    }
+    return num.toLocaleString('en-US');
+}
+
+</script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-chart-heatmap@0.4.0/dist/chartjs-chart-heatmap.min.js"></script>
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+    font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--color-text-primary);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-page-bg) 85%, white) 0%, var(--color-page-bg) 60%);
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.back-button:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.heatmap-controls {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    padding: 1.5rem;
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-floating);
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 150px;
+}
+
+.control-group-full {
+    width: 100%;
+    min-width: 100%;
+}
+
+.player-search-container {
+    position: relative;
+    width: 100%;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    margin-top: 2px;
+}
+
+.player-dropdown-item {
+    padding: 0.75rem 1rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background 0.2s ease;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 80%, var(--color-main-bg));
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+}
+
+.player-dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+}
+
+.selected-player-display span {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.clear-player-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    color: var(--color-accent);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--color-border);
+    border-color: var(--color-border);
+}
+
+.generate-btn.disabled:hover {
+    transform: none;
+    box-shadow: none;
+    opacity: 0.6; /* Slight feedback on hover even when visually disabled */
+}
+
+.control-label {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.control-select {
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.control-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.control-input {
+    pointer-events: auto !important;
+    cursor: text !important;
+}
+
+.control-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.generate-btn {
+    padding: 0.75rem 2rem;
+    background: var(--color-accent);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    color: var(--color-main-bg);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.generate-btn:hover {
+    background: var(--color-accent-bright);
+    border-color: var(--color-accent-bright);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.3);
+}
+
+.heatmap-container {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 18px;
+    padding: 2rem;
+    box-shadow: var(--shadow-elevated);
+    backdrop-filter: blur(10px);
+}
+
+.heatmap-wrapper {
+    width: 100%;
+    min-height: 500px;
+    position: relative;
+    margin-bottom: 1.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: var(--color-layer-soft);
+    border-radius: 16px;
+    border: 1px solid var(--color-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+}
+
+.heatmap-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    pointer-events: none;
+    padding: 2rem;
+    opacity: 1;
+    transition: opacity 0.4s ease;
+    z-index: 1;
+    background: radial-gradient(circle at center, rgba(255, 127, 0, 0.08), transparent 65%);
+}
+
+.heatmap-placeholder.hidden {
+    opacity: 0;
+}
+
+.idle-scene {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+
+.idle-gradient {
+    position: absolute;
+    inset: -40%;
+    background: radial-gradient(circle at 50% 30%, rgba(255, 149, 0, 0.18), transparent 55%),
+                radial-gradient(circle at 20% 80%, rgba(255, 127, 0, 0.12), transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.08), transparent 55%);
+    filter: blur(1px);
+    animation: idleGlow 12s ease-in-out infinite alternate;
+}
+
+.idle-grid {
+    position: absolute;
+    inset: -30%;
+    background-image: linear-gradient(rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+                      linear-gradient(90deg, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+    background-size: 120px 120px;
+    opacity: 0.18;
+    transform: rotate(12deg);
+    animation: gridDrift 18s linear infinite;
+}
+
+.idle-grid-alt {
+    transform: rotate(-18deg);
+    background-size: 140px 140px;
+    opacity: 0.12;
+    animation-duration: 22s;
+}
+
+.idle-logo {
+    position: relative;
+    width: 200px;
+    height: 200px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle, rgba(8, 8, 8, 0.9) 0%, rgba(0, 0, 0, 0.65) 60%, rgba(0, 0, 0, 0.2) 100%);
+    box-shadow: 0 0 40px rgba(255, 149, 0, 0.15), 0 0 120px rgba(255, 127, 0, 0.1);
+    animation: logoPulse 5s ease-in-out infinite;
+}
+
+.idle-logo::before {
+    content: "";
+    position: absolute;
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    background: var(--color-main-bg);
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.55);
+    z-index: 1;
+}
+
+.idle-logo img {
+    width: 90px;
+    height: auto;
+    position: relative;
+    z-index: 2;
+    filter: drop-shadow(0 10px 18px rgba(255, 149, 0, 0.35));
+}
+
+.idle-logo-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 149, 0, 0.6);
+    mix-blend-mode: screen;
+}
+
+.idle-logo-ring::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    opacity: 0.5;
+}
+
+.ring-outer {
+    width: 260px;
+    height: 260px;
+    animation: ringOrbit 16s linear infinite;
+}
+
+.ring-mid {
+    width: 220px;
+    height: 220px;
+    animation: ringPulse 6s ease-in-out infinite;
+}
+
+.ring-inner {
+    width: 180px;
+    height: 180px;
+    border-color: rgba(255, 127, 0, 0.35);
+    animation: ringPulse 4s ease-in-out infinite reverse;
+}
+
+.idle-spark {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 20px rgba(255, 149, 0, 0.8);
+    animation: sparkTravel 9s linear infinite;
+}
+
+.idle-spark-1 { top: 20%; left: 15%; animation-delay: 0s; }
+.idle-spark-2 { bottom: 18%; right: 12%; animation-delay: 2.4s; }
+.idle-spark-3 { top: 55%; left: 78%; animation-delay: 4.8s; }
+
+@keyframes idleGlow {
+    0% { transform: scale(1); opacity: 0.75; }
+    100% { transform: scale(1.05); opacity: 0.55; }
+}
+
+@keyframes gridDrift {
+    0% { background-position: 0 0, 0 0; opacity: 0.16; }
+    50% { background-position: 60px 60px, 60px 60px; opacity: 0.22; }
+    100% { background-position: 0 0, 0 0; opacity: 0.16; }
+}
+
+@keyframes logoPulse {
+    0%, 100% { box-shadow: 0 0 35px rgba(255, 149, 0, 0.12), 0 0 110px rgba(255, 127, 0, 0.08); transform: scale(1); }
+    50% { box-shadow: 0 0 50px rgba(255, 149, 0, 0.22), 0 0 160px rgba(255, 127, 0, 0.2); transform: scale(1.02); }
+}
+
+@keyframes ringPulse {
+    0%, 100% { transform: scale(1); opacity: 0.6; }
+    50% { transform: scale(1.06); opacity: 0.85; }
+}
+
+@keyframes ringOrbit {
+    0% { transform: rotate(0deg) scale(1); opacity: 0.45; }
+    50% { transform: rotate(180deg) scale(1.02); opacity: 0.7; }
+    100% { transform: rotate(360deg) scale(1); opacity: 0.45; }
+}
+
+@keyframes sparkTravel {
+    0% { transform: translate(0, 0) scale(1); opacity: 0; }
+    10% { opacity: 1; }
+    50% { transform: translate(80px, -60px) scale(1.3); opacity: 0.8; }
+    90% { opacity: 1; }
+    100% { transform: translate(140px, -120px) scale(0.8); opacity: 0; }
+}
+
+#heatmapCanvas {
+    max-width: 100%;
+    max-height: 600px;
+    width: 100% !important;
+    height: auto !important;
+    border-radius: 12px;
+    position: relative;
+    z-index: 2;
+}
+
+.heatmap-info {
+    padding: 1.25rem 1.5rem;
+    background: var(--color-layer-soft);
+    border-radius: 12px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-floating);
+}
+
+.heatmap-info p {
+    color: var(--color-text-muted);
+    margin: 0;
+    text-align: center;
+    font-size: 0.95rem;
+}
+
+.heatmap-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+}
+
+.heatmap-summary-card {
+    background: color-mix(in srgb, var(--color-layer-card) 90%, var(--color-page-bg));
+    border: 1px solid var(--color-layer-border);
+    border-radius: 10px;
+    padding: 0.75rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.heatmap-summary-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.58);
+}
+
+.heatmap-summary-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--color-text-primary) 85%, white);
+}
+
+.heatmap-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--color-layer-card) 85%, white);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    color: var(--color-text-primary);
+    font-size: 0.85rem;
+    line-height: 1.3;
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.25);
+    transform: translate(0, -100%) scale(0.98);
+    opacity: 0;
+    transition: opacity 120ms ease, transform 150ms ease;
+    z-index: 10;
+    min-width: 180px;
+}
+
+.heatmap-tooltip.visible {
+    opacity: 1;
+    transform: translate(0, -100%) scale(1);
+}
+
+.heatmap-tooltip-title {
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 0.35rem;
+}
+
+.heatmap-tooltip-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: color-mix(in srgb, var(--color-danger-soft) 75%, var(--color-text-primary));
+}
+
+.heatmap-tooltip-metric {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+
+    .header-content {
+        flex-direction: column;
+    }
+
+    .heatmap-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-group {
+        min-width: 100%;
+    }
+
+    .generate-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+</style>
+
+<script>
+let heatmapChart = null; // Legacy reference (unused for Chart.js)
+let allPlayers = [];
+let selectedPlayer = null;
+let heatmapCanvas = null;
+let heatmapTooltip = null;
+let heatmapRenderState = null;
+let hoverAnimationFrame = null;
+
+// Ensure functions from first script block are available in this scope
+// Define them here if they're not already defined
+if (typeof hideHeatmapTooltip === 'undefined') {
+    window.hideHeatmapTooltip = function() {
+        const tooltip = document.getElementById('heatmapTooltip');
+        if (!tooltip) {
+            return;
+        }
+        tooltip.classList.remove('visible');
+        tooltip.style.display = 'none';
+    };
+}
+
+if (typeof handleHeatmapMouseMove === 'undefined') {
+    window.handleHeatmapMouseMove = function(event) {
+        const canvas = document.getElementById('heatmapCanvas');
+        if (!heatmapRenderState || !canvas) {
+            return;
+        }
+
+        const state = heatmapRenderState;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = state.displayWidth / rect.width;
+        const scaleY = state.displayHeight / rect.height;
+        const canvasX = (event.clientX - rect.left) * scaleX;
+        const canvasY = (event.clientY - rect.top) * scaleY;
+
+        const heatmapStartX = state.heatmapStartX || 0;
+        const heatmapStartY = state.padding || state.padding;
+
+        const insideHeatmap = (
+            canvasX >= heatmapStartX + state.padding &&
+            canvasX <= heatmapStartX + state.padding + state.drawWidth &&
+            canvasY >= heatmapStartY &&
+            canvasY <= heatmapStartY + state.drawHeight
+        );
+
+        if (!insideHeatmap) {
+            handleHeatmapMouseLeave();
+            return;
+        }
+
+        const cellX = Math.min(state.gridSize - 1, Math.max(0, Math.floor((canvasX - heatmapStartX - state.padding) / state.cellWidth)));
+        const cellY = Math.min(state.gridSize - 1, Math.max(0, Math.floor((canvasY - heatmapStartY) / state.cellHeight)));
+
+        const isSameCell = state.activeHighlight && state.activeHighlight.cellX === cellX && state.activeHighlight.cellY === cellY;
+
+        if (!isSameCell) {
+            if (hoverAnimationFrame) {
+                cancelAnimationFrame(hoverAnimationFrame);
+            }
+            hoverAnimationFrame = requestAnimationFrame(() => {
+                drawHeatmapCanvas(state, { cellX, cellY });
+                hoverAnimationFrame = null;
+            });
+        }
+
+        updateHeatmapTooltip(event, state, cellX, cellY);
+    };
+}
+
+if (typeof handleHeatmapMouseLeave === 'undefined') {
+    window.handleHeatmapMouseLeave = function() {
+        if (!heatmapRenderState) {
+            return;
+        }
+
+        if (hoverAnimationFrame) {
+            cancelAnimationFrame(hoverAnimationFrame);
+            hoverAnimationFrame = null;
+        }
+
+        drawHeatmapCanvas(heatmapRenderState, null);
+        hideHeatmapTooltip();
+    };
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    // Initialize metrics with hitter metrics by default
+    updateMetricsForPlayer(false);
+    // Initialize canvas and tooltip elements
+    heatmapCanvas = document.getElementById('heatmapCanvas');
+    heatmapTooltip = document.getElementById('heatmapTooltip');
+    
+    // Show placeholder initially
+    updatePlaceholderVisibility();
+    
+    // Load filter options
+    await loadFilterOptions();
+    
+    // Set up player search (doesn't need to wait for players to load)
+    setupPlayerSearch();
+    
+    const generateBtn = document.getElementById('generateHeatmap');
+    if (generateBtn) {
+        // Initially disable the button visually (but keep it clickable)
+        generateBtn.classList.add('disabled');
+        
+        generateBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Check if player is selected
+            if (!selectedPlayer) {
+                alert('Please select a player first');
+                return;
+            }
+            
+            // Remove disabled class if it exists
+            this.classList.remove('disabled');
+            
+            generateHeatmap();
+        });
+    }
+
+    document.getElementById('clearPlayer').addEventListener('click', function() {
+        clearPlayerSelection();
+    });
+});
+
+async function loadFilterOptions() {
+    try {
+        const response = await fetch('/api/analytics/players');
+        const data = await response.json();
+        
+        if (data.players) {
+            allPlayers = data.players;
+            console.log(`Loaded ${allPlayers.length} players for search`);
+        } else {
+            console.warn('No players found in response');
+        }
+        
+        // Don't populate season select here - it will be populated when a player is selected
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
+}
+
+async function loadPlayerSeasons(playerName) {
+    try {
+        const encodedName = encodeURIComponent(playerName);
+        const url = `/api/csv/player/${encodedName}/seasons`;
+        console.log('Loading seasons for player:', playerName, 'URL:', url);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+            console.error('Failed to load player seasons:', response.status, errorData);
+            
+            // Show error in season select
+            const seasonSelect = document.getElementById('seasonSelect');
+            if (seasonSelect) {
+                seasonSelect.innerHTML = '<option value="">Error loading seasons</option>';
+            }
+            return;
+        }
+        
+        const data = await response.json();
+        console.log('Seasons data received:', data);
+        
+        // Check for error in response
+        if (data.error) {
+            console.error('Error in seasons response:', data.error);
+            const seasonSelect = document.getElementById('seasonSelect');
+            if (seasonSelect) {
+                seasonSelect.innerHTML = '<option value="">Error: ' + data.error + '</option>';
+            }
+            return;
+        }
+        
+        const seasons = data.seasons || [];
+        
+        // Populate season select
+        const seasonSelect = document.getElementById('seasonSelect');
+        
+        if (!seasonSelect) {
+            console.error('Season select element not found');
+            return;
+        }
+        
+        // Clear existing options except "All Seasons"
+        seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+        
+        // Add seasons for this player
+        if (seasons.length === 0) {
+            console.warn('No seasons found for player:', playerName);
+            seasonSelect.innerHTML = '<option value="">No seasons available</option>';
+        } else {
+            console.log(`Adding ${seasons.length} seasons to dropdown`);
+            // Sort seasons in descending order (most recent first)
+            const sortedSeasons = [...seasons].sort((a, b) => {
+                const aInt = parseInt(a) || 0;
+                const bInt = parseInt(b) || 0;
+                return bInt - aInt;
+            });
+            
+            sortedSeasons.forEach(season => {
+                const option = document.createElement('option');
+                option.value = season;
+                option.textContent = season;
+                seasonSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading player seasons:', error);
+        const seasonSelect = document.getElementById('seasonSelect');
+        if (seasonSelect) {
+            seasonSelect.innerHTML = '<option value="">Error loading seasons</option>';
+        }
+    }
+}
+
+let searchTimeout = null;
+
+function setupPlayerSearch() {
+    const input = document.getElementById('playerSearch');
+    const dropdown = document.getElementById('playerSearchDropdown');
+    
+    if (!input || !dropdown) {
+        console.error('Player search elements not found');
+        return;
+    }
+    
+    // Ensure input is enabled and interactive
+    input.disabled = false;
+    input.readOnly = false;
+    input.style.pointerEvents = 'auto';
+    input.style.opacity = '1';
+    input.removeAttribute('data-listener-attached');
+    
+    // Clear any existing timeouts
+    if (searchTimeout) {
+        clearTimeout(searchTimeout);
+    }
+    
+    // Search function using API
+    async function searchPlayers() {
+        const searchTerm = input.value.trim();
+        
+        if (!searchTerm || searchTerm.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/csv/search?q=${encodeURIComponent(searchTerm)}`);
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            const players = data.players || [];
+            
+            if (players.length === 0) {
+                dropdown.innerHTML = '<div class="player-dropdown-item" style="color: var(--color-text-muted);">No players found</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            // Show suggestions
+            dropdown.innerHTML = players.slice(0, 10).map(player => 
+                `<div class="player-dropdown-item" data-player="${player.name.replace(/"/g, '&quot;')}">${player.name}</div>`
+            ).join('');
+            dropdown.style.display = 'block';
+            
+            // Add click handlers to suggestions
+            dropdown.querySelectorAll('.player-dropdown-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const playerName = this.getAttribute('data-player');
+                    if (playerName && !playerName.includes('No players found')) {
+                        selectPlayer(playerName);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Search error:', error);
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    // Input event with debounce
+    input.addEventListener('input', function(e) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(searchPlayers, 300);
+    });
+    
+    // Focus event - show results if there's text
+    input.addEventListener('focus', function() {
+        if (this.value.trim().length >= 2) {
+            searchPlayers();
+        }
+    });
+    
+    // Handle Enter key
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(searchTimeout);
+            const firstMatch = dropdown.querySelector('.player-dropdown-item[data-player]');
+            if (firstMatch && !firstMatch.textContent.includes('No players found')) {
+                firstMatch.click();
+            } else if (this.value.trim().length >= 2) {
+                // If no match but there's text, try to select the entered name
+                selectPlayer(this.value.trim());
+            }
+        }
+    });
+    
+    // Hide dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+// Define sorted metrics
+const HITTER_METRICS = [
+    {value: 'xwOBA', label: 'xwOBA'},
+    {value: 'xSLG', label: 'xSLG'},
+    {value: 'xBA', label: 'xBA'},
+    {value: 'wRC+', label: 'wRC+'},
+    {value: 'OPS', label: 'OPS'},
+    {value: 'SLG', label: 'SLG'},
+    {value: 'OBP', label: 'OBP'},
+    {value: 'AVG', label: 'Batting Average'},
+    {value: 'HR', label: 'Home Runs'},
+    {value: 'RBI', label: 'RBI'},
+];
+
+const PITCHER_METRICS = [
+    {value: 'xwOBA', label: 'xwOBA Allowed'},
+    {value: 'xBA', label: 'xBA Allowed'},
+    {value: 'xSLG', label: 'xSLG Allowed'},
+    {value: 'Whiff Rate', label: 'Whiff Rate'},
+    {value: 'Strike Rate', label: 'Strike Rate'},
+];
+
+function updateMetricsForPlayer(isPitcher) {
+    const metricSelect = document.getElementById('metricSelect');
+    const metrics = isPitcher ? PITCHER_METRICS : HITTER_METRICS;
+    
+    // Store current selection
+    const currentValue = metricSelect.value;
+    
+    // Clear and repopulate
+    metricSelect.innerHTML = '';
+    metrics.forEach(metric => {
+        const option = document.createElement('option');
+        option.value = metric.value;
+        option.textContent = metric.label;
+        metricSelect.appendChild(option);
+    });
+    
+    // Try to restore previous selection if it exists in new list
+    if (currentValue && metrics.some(m => m.value === currentValue)) {
+        metricSelect.value = currentValue;
+    } else if (metrics.length > 0) {
+        metricSelect.value = metrics[0].value;
+    }
+    
+    // Update handedness label
+    const handednessLabel = document.getElementById('handednessLabel');
+    if (handednessLabel) {
+        handednessLabel.textContent = isPitcher ? 'Batter Handedness' : 'Pitcher Handedness';
+    }
+}
+
+async function selectPlayer(playerName) {
+    console.log('selectPlayer called with:', playerName);
+    selectedPlayer = playerName;
+    document.getElementById('selectedPlayerName').textContent = playerName;
+    document.getElementById('selectedPlayerDisplay').style.display = 'flex';
+    const searchInput = document.getElementById('playerSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('playerSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    const generateBtn = document.getElementById('generateHeatmap');
+    if (generateBtn) {
+        generateBtn.classList.remove('disabled');
+    }
+    
+    // Get player info to determine type and update metrics
+    try {
+        const response = await fetch(`/api/visuals/heatmap/player-info?player=${encodeURIComponent(playerName)}`);
+        if (response.ok) {
+            const data = await response.json();
+            updateMetricsForPlayer(data.is_pitcher);
+        } else {
+            // Default to hitter metrics if API call fails
+            updateMetricsForPlayer(false);
+        }
+    } catch (error) {
+        console.error('Error fetching player info:', error);
+        // Default to hitter metrics on error
+        updateMetricsForPlayer(false);
+    }
+    
+    // Load seasons for this player
+    console.log('Loading seasons for:', playerName);
+    await loadPlayerSeasons(playerName);
+    console.log('Seasons loading completed for:', playerName);
+}
+
+function updatePlaceholderVisibility() {
+    const placeholder = document.getElementById('heatmapPlaceholder');
+    const canvas = document.getElementById('heatmapCanvas');
+    
+    if (!placeholder || !canvas) return;
+    
+    // Show placeholder if canvas has no width/height (not drawn) or is empty
+    const hasContent = canvas.width > 0 && canvas.height > 0 && heatmapRenderState !== null;
+    if (hasContent) {
+        placeholder.classList.add('hidden');
+    } else {
+        placeholder.classList.remove('hidden');
+    }
+}
+
+function clearPlayerSelection() {
+    selectedPlayer = null;
+    document.getElementById('selectedPlayerDisplay').style.display = 'none';
+    document.getElementById('playerSearch').value = '';
+    const generateBtn = document.getElementById('generateHeatmap');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+    }
+
+    const seasonSelect = document.getElementById('seasonSelect');
+    seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+
+    const canvas = document.getElementById('heatmapCanvas');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        canvas.removeAttribute('width');
+        canvas.removeAttribute('height');
+    }
+
+    hideHeatmapTooltip();
+    heatmapRenderState = null;
+    updatePlaceholderVisibility();
+
+    const info = document.getElementById('heatmapInfo');
+    info.innerHTML = '<p>Select a player and click "Generate Heatmap" to visualize the data.</p>';
+}
+
+async function generateHeatmap() {
+    if (!selectedPlayer) {
+        alert('Please select a player first');
+        return;
+    }
+
+    const metric = document.getElementById('metricSelect').value;
+    const season = document.getElementById('seasonSelect').value;
+    const count = document.getElementById('countSelect').value;
+    const pitcherHand = document.getElementById('pitcherHandSelect').value;
+    const pitchType = document.getElementById('pitchTypeSelect').value;
+
+    if (!metric) {
+        alert('Please select a metric');
+        return;
+    }
+
+    hideHeatmapTooltip();
+    heatmapRenderState = null;
+
+    const info = document.getElementById('heatmapInfo');
+    info.innerHTML = `
+        <div class="heatmap-info-message heatmap-info-loading">
+            <div class="heatmap-info-title">Generating Heatmap…</div>
+            <div class="heatmap-info-text">Pulling Statcast pitch-level data with your filters.</div>
+        </div>
+    `;
+
+    try {
+        const params = new URLSearchParams({
+            player: selectedPlayer,
+            metric
+        });
+
+        if (season) params.append('season', season);
+        if (count) params.append('count', count);
+        if (pitcherHand) params.append('pitcher_hand', pitcherHand);
+        if (pitchType) params.append('pitch_type', pitchType);
+
+        const response = await fetch(`/api/visuals/heatmap?${params.toString()}`);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Failed to fetch heatmap data');
+        }
+
+        const data = await response.json();
+        createHeatmapChart(data);
+    } catch (error) {
+        console.error('Error generating heatmap:', error);
+        info.innerHTML = `
+            <div class="heatmap-info-message heatmap-info-warning">
+                <div class="heatmap-info-title">Unable to render heatmap</div>
+                <div class="heatmap-info-text">${error.message}</div>
+            </div>
+        `;
+        updatePlaceholderVisibility();
+    }
+}
+
+function createHeatmapChart(data) {
+    const canvas = document.getElementById('heatmapCanvas');
+    const info = document.getElementById('heatmapInfo');
+    
+    if (!canvas) {
+        console.error('Canvas element not found');
+        if (info) {
+            info.innerHTML = `<p style="color: var(--color-danger);">Error: Canvas element not found</p>`;
+        }
+        updatePlaceholderVisibility();
+        return;
+    }
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+        console.error('Could not get 2d context from canvas');
+        if (info) {
+            info.innerHTML = `<p style="color: var(--color-danger);">Error: Could not initialize canvas</p>`;
+        }
+        updatePlaceholderVisibility();
+        return;
+    }
+    
+    // Destroy existing chart if it exists
+    if (heatmapChart) {
+        heatmapChart.destroy();
+        heatmapChart = null;
+    }
+    
+    // Check for errors
+    if (data.error) {
+        if (info) {
+            info.innerHTML = `<p style="color: var(--color-danger);">Error: ${data.error}</p>`;
+        }
+        updatePlaceholderVisibility();
+        return;
+    }
+
+    // Check if we have grid data for location-based heatmap
+    if (!data.grid || data.grid.length === 0) {
+        if (info) {
+            info.innerHTML = `<p style="color: var(--color-danger);">No location data available for the selected filters.</p>`;
+        }
+        updatePlaceholderVisibility();
+        return;
+    }
+
+    // Use the sophisticated rendering system
+    heatmapRenderState = buildHeatmapRenderState(ctx, canvas, data, info);
+    drawHeatmapCanvas(heatmapRenderState);
+    
+    // Update placeholder visibility
+    updatePlaceholderVisibility();
+    
+    // Set up mouse event handlers
+    canvas.removeEventListener('mousemove', handleHeatmapMouseMove);
+    canvas.removeEventListener('mouseleave', handleHeatmapMouseLeave);
+    canvas.addEventListener('mousemove', handleHeatmapMouseMove);
+    canvas.addEventListener('mouseleave', handleHeatmapMouseLeave);
+}
+
+function drawStrikeZoneHeatmap(ctx, data, infoElement) {
+    const canvas = ctx.canvas;
+    const padding = 60;
+    const gridSize = data.grid_size || 12;
+    const xRange = data.x_range || [-2.0, 2.0];
+    const zRange = data.z_range || [0.5, 4.5];
+    
+    // Set canvas size
+    const width = 600;
+    const height = 600;
+    canvas.width = width;
+    canvas.height = height;
+    
+    // Calculate drawing area
+    const drawWidth = width - (padding * 2);
+    const drawHeight = height - (padding * 2);
+    const cellWidth = drawWidth / gridSize;
+    const cellHeight = drawHeight / gridSize;
+    
+    // Get min/max values for color scaling
+    const values = data.grid.map(cell => cell.value).filter(v => v !== null);
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const range = maxValue - minValue || 1;
+    
+    // Color gradient function (blue to yellow to red)
+    const getColor = (value) => {
+        if (value === null) return 'var(--color-surface)';
+        const normalized = (value - minValue) / range;
+        
+        // Interpolate from blue (low) -> yellow (medium) -> red (high)
+        let r, g, b;
+        if (normalized < 0.5) {
+            // Blue to yellow
+            const t = normalized * 2;
+            r = Math.floor(0 + (255 * t));
+            g = Math.floor(0 + (255 * t));
+            b = Math.floor(255 * (1 - t));
+        } else {
+            // Yellow to red
+            const t = (normalized - 0.5) * 2;
+            r = 255;
+            g = Math.floor(255 * (1 - t));
+            b = 0;
+        }
+        return `rgb(${r}, ${g}, ${b})`;
+    };
+    
+    // Clear canvas
+    ctx.fillStyle = 'var(--color-surface-alt)';
+    ctx.fillRect(0, 0, width, height);
+    
+    // Draw grid cells
+    data.grid.forEach(cell => {
+        if (cell.value === null) return;
+        
+        const x = padding + (cell.x * cellWidth);
+        const y = padding + (cell.y * cellHeight);
+        
+        // Draw cell with color based on value
+        ctx.fillStyle = getColor(cell.value);
+        ctx.fillRect(x, y, cellWidth, cellHeight);
+        
+        // Draw border
+        ctx.strokeStyle = 'var(--color-border)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, cellWidth, cellHeight);
+    });
+    
+    // Draw strike zone outline
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 2;
+    const strikeZoneX = padding + (drawWidth * 0.25); // Strike zone is roughly in the middle
+    const strikeZoneY = padding + (drawHeight * 0.25);
+    const strikeZoneWidth = drawWidth * 0.5;
+    const strikeZoneHeight = drawHeight * 0.5;
+    ctx.strokeRect(strikeZoneX, strikeZoneY, strikeZoneWidth, strikeZoneHeight);
+    
+    // Draw plate (home plate shape at bottom)
+    const plateY = padding + drawHeight - 10;
+    const plateCenterX = padding + (drawWidth / 2);
+    const plateWidth = 30;
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(plateCenterX - plateWidth/2, plateY);
+    ctx.lineTo(plateCenterX - plateWidth/4, plateY + 10);
+    ctx.lineTo(plateCenterX + plateWidth/4, plateY + 10);
+    ctx.lineTo(plateCenterX + plateWidth/2, plateY);
+    ctx.closePath();
+    ctx.stroke();
+    
+    // Draw axes labels
+    ctx.fillStyle = 'var(--color-text-muted)';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    
+    // X-axis labels (horizontal position)
+    ctx.fillText('Inside', padding + (drawWidth * 0.25), height - 20);
+    ctx.fillText('Center', padding + (drawWidth / 2), height - 20);
+    ctx.fillText('Outside', padding + (drawWidth * 0.75), height - 20);
+    
+    // Y-axis labels (vertical position)
+    ctx.save();
+    ctx.translate(15, padding + (drawHeight / 2));
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('High', 0, 0);
+    ctx.restore();
+    
+    ctx.save();
+    ctx.translate(15, padding + drawHeight - 20);
+    ctx.rotate(-Math.PI / 2);
+    ctx.fillText('Low', 0, 0);
+    ctx.restore();
+    
+    // Draw title with filters
+    ctx.fillStyle = 'var(--color-text-primary)';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    
+    let titleParts = [`${data.player || 'Player'} - ${data.metric || 'Metric'}`];
+    if (data.filters.season) titleParts.push(`Season: ${data.filters.season}`);
+    if (data.filters.pitcher_hand) {
+        const handName = data.filters.pitcher_hand === 'R' ? 'vs RHP' : 'vs LHP';
+        titleParts.push(handName);
+    }
+    if (data.filters.pitch_type) {
+        const pitchName = data.filters.pitch_type;
+        titleParts.push(pitchName);
+    }
+    
+    ctx.fillText(titleParts.join(' | '), width / 2, 25);
+    
+    // Draw color scale/legend
+    drawColorScale(ctx, width - 150, padding + 20, 20, drawHeight - 40, minValue, maxValue, data.metric);
+    
+    // Update info with summary
+    const summary = data.summary || {};
+    infoElement.innerHTML = `
+        <div style="display: flex; justify-content: space-around; flex-wrap: wrap; gap: 1rem; margin-top: 1rem;">
+            <div><strong>Grid Cells:</strong> ${summary.total_cells || 0}</div>
+            <div><strong>Total Pitches:</strong> ${summary.total_pitches || 0}</div>
+            <div><strong>Min ${data.metric}:</strong> ${summary.min_value?.toFixed(3) || 'N/A'}</div>
+            <div><strong>Max ${data.metric}:</strong> ${summary.max_value?.toFixed(3) || 'N/A'}</div>
+            <div><strong>Avg ${data.metric}:</strong> ${summary.avg_value?.toFixed(3) || 'N/A'}</div>
+        </div>
+    `;
+}
+
+function drawColorScale(ctx, x, y, width, height, minValue, maxValue, metric) {
+    const steps = 100;
+    const stepHeight = height / steps;
+    
+    for (let i = 0; i < steps; i++) {
+        const value = minValue + ((maxValue - minValue) * (i / steps));
+        const normalized = (value - minValue) / (maxValue - minValue);
+        
+        let r, g, b;
+        if (normalized < 0.5) {
+            const t = normalized * 2;
+            r = Math.floor(0 + (255 * t));
+            g = Math.floor(0 + (255 * t));
+            b = Math.floor(255 * (1 - t));
+        } else {
+            const t = (normalized - 0.5) * 2;
+            r = 255;
+            g = Math.floor(255 * (1 - t));
+            b = 0;
+        }
+        
+        ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+        ctx.fillRect(x, y + (i * stepHeight), width, stepHeight);
+    }
+    
+    // Draw border
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x, y, width, height);
+    
+    // Draw labels
+    ctx.fillStyle = 'var(--color-text-primary)';
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(maxValue.toFixed(3), x + width + 5, y + 5);
+    ctx.fillText(minValue.toFixed(3), x + width + 5, y + height - 5);
+    ctx.fillText(metric || 'Value', x, y - 10);
+}
+</script>
+{% endblock %}
+

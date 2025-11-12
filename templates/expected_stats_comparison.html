@@ -1,0 +1,1204 @@
+{% extends "base.html" %}
+
+{% block title %}Expected Stats Comparison - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Expected Stats Comparison</h1>
+                <p class="page-subtitle">Compare expected vs actual performance with confidence intervals and regression indicators</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="expected-stats-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Player Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="playerSearch" 
+                        class="control-input" 
+                        placeholder="Type to search players..."
+                        autocomplete="off"
+                    >
+                    <div id="playerSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedPlayerDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedPlayerName"></span>
+                    <button id="clearPlayer" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Pitch Type</label>
+                <select id="pitchTypeSelect" class="control-select">
+                    <option value="">All Types</option>
+                    <option value="FF">Four-Seam Fastball</option>
+                    <option value="FT">Two-Seam Fastball</option>
+                    <option value="SI">Sinker</option>
+                    <option value="FC">Cutter</option>
+                    <option value="SL">Slider</option>
+                    <option value="ST">Sweeper</option>
+                    <option value="CU">Curveball</option>
+                    <option value="KC">Knuckle Curve</option>
+                    <option value="CH">Changeup</option>
+                    <option value="FS">Split-Finger</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Pitcher Handedness</label>
+                <select id="pitcherHandSelect" class="control-select">
+                    <option value="">All</option>
+                    <option value="R">Right</option>
+                    <option value="L">Left</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Count</label>
+                <select id="countSelect" class="control-select">
+                    <option value="">All Counts</option>
+                    <option value="0-0">0-0</option>
+                    <option value="1-0">1-0</option>
+                    <option value="0-1">0-1</option>
+                    <option value="1-1">1-1</option>
+                    <option value="2-0">2-0</option>
+                    <option value="2-1">2-1</option>
+                    <option value="1-2">1-2</option>
+                    <option value="2-2">2-2</option>
+                    <option value="3-0">3-0</option>
+                    <option value="3-1">3-1</option>
+                    <option value="3-2">3-2</option>
+                    <option value="0-2">0-2</option>
+                </select>
+            </div>
+
+            <button id="generateComparison" class="generate-btn disabled" type="button">
+                <i class="fas fa-chart-area"></i> Generate Comparison
+            </button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading expected stats data...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error-message" style="display: none;">
+            <i class="fas fa-exclamation-circle"></i>
+            <span id="errorText"></span>
+        </div>
+
+        <!-- Main Comparison Content -->
+        <div id="comparisonContent" class="comparison-content" style="display: none;">
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <h2 id="playerTitle"></h2>
+                <div class="summary-stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total PA</div>
+                        <div class="stat-value" id="totalPA">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Batted Balls</div>
+                        <div class="stat-value" id="totalBB">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Season</div>
+                        <div class="stat-value" id="seasonDisplay">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Comparison Grid -->
+            <div class="stats-comparison-grid">
+                <!-- xwOBA Card -->
+                <div class="stat-comparison-card">
+                    <div class="comparison-header">
+                        <h3>xwOBA</h3>
+                        <div class="regression-indicator" id="xwobaIndicator"></div>
+                    </div>
+                    <div class="comparison-values">
+                        <div class="value-group">
+                            <span class="value-label">Expected</span>
+                            <span class="value-expected" id="xwobaExpected">-</span>
+                        </div>
+                        <div class="value-group">
+                            <span class="value-label">Actual</span>
+                            <span class="value-actual" id="xwobaActual">-</span>
+                        </div>
+                        <div class="value-group">
+                            <span class="value-label">Difference</span>
+                            <span class="value-diff" id="xwobaDiff">-</span>
+                        </div>
+                    </div>
+                    <canvas id="xwobaChart" class="comparison-chart"></canvas>
+                </div>
+
+                <!-- xBA Card -->
+                <div class="stat-comparison-card">
+                    <div class="comparison-header">
+                        <h3>xBA</h3>
+                        <div class="regression-indicator" id="xbaIndicator"></div>
+                    </div>
+                    <div class="comparison-values">
+                        <div class="value-group">
+                            <span class="value-label">Expected</span>
+                            <span class="value-expected" id="xbaExpected">-</span>
+                        </div>
+                        <div class="value-group">
+                            <span class="value-label">Actual</span>
+                            <span class="value-actual" id="xbaActual">-</span>
+                        </div>
+                        <div class="value-group">
+                            <span class="value-label">Difference</span>
+                            <span class="value-diff" id="xbaDiff">-</span>
+                        </div>
+                    </div>
+                    <canvas id="xbaChart" class="comparison-chart"></canvas>
+                </div>
+
+                <!-- xSLG Card -->
+                <div class="stat-comparison-card">
+                    <div class="comparison-header">
+                        <h3>xSLG</h3>
+                        <div class="regression-indicator" id="xslgIndicator"></div>
+                    </div>
+                    <div class="comparison-values">
+                        <div class="value-group">
+                            <span class="value-label">Expected</span>
+                            <span class="value-expected" id="xslgExpected">-</span>
+                        </div>
+                        <div class="value-group">
+                            <span class="value-label">Actual</span>
+                            <span class="value-actual" id="xslgActual">-</span>
+                        </div>
+                        <div class="value-group">
+                            <span class="value-label">Difference</span>
+                            <span class="value-diff" id="xslgDiff">-</span>
+                        </div>
+                    </div>
+                    <canvas id="xslgChart" class="comparison-chart"></canvas>
+                </div>
+
+                <!-- xISO Card -->
+                <div class="stat-comparison-card">
+                    <div class="comparison-header">
+                        <h3>xISO</h3>
+                        <div class="regression-indicator" id="xisoIndicator"></div>
+                    </div>
+                    <div class="comparison-values">
+                        <div class="value-group">
+                            <span class="value-label">Expected</span>
+                            <span class="value-expected" id="xisoExpected">-</span>
+                        </div>
+                        <div class="value-group">
+                            <span class="value-label">Actual</span>
+                            <span class="value-actual" id="xisoActual">-</span>
+                        </div>
+                        <div class="value-group">
+                            <span class="value-label">Difference</span>
+                            <span class="value-diff" id="xisoDiff">-</span>
+                        </div>
+                    </div>
+                    <canvas id="xisoChart" class="comparison-chart"></canvas>
+                </div>
+            </div>
+
+            <!-- Trend Over Time Chart -->
+            <div class="trend-section">
+                <h3>Trend Over Time</h3>
+                <canvas id="trendChart" class="trend-chart"></canvas>
+            </div>
+
+            <!-- Info Section -->
+            <div id="comparisonInfo" class="comparison-info">
+                <p>Select a player and click "Generate Comparison" to see expected vs actual statistics.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script>
+let selectedPlayer = null;
+let comparisonCharts = {};
+let searchTimeout = null;
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    setupPlayerSearch();
+    setupGenerateButton();
+    updateGenerateButton(); // Initialize button state
+    
+    // Setup clear button
+    const clearBtn = document.getElementById('clearPlayer');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearPlayerSelection);
+    }
+});
+
+// Player search functionality
+function setupPlayerSearch() {
+    const input = document.getElementById('playerSearch');
+    const dropdown = document.getElementById('playerSearchDropdown');
+    
+    if (!input || !dropdown) return;
+    
+    input.disabled = false;
+    input.readOnly = false;
+    input.style.pointerEvents = 'auto';
+    
+    async function searchPlayers() {
+        const searchTerm = input.value.trim();
+        
+        if (!searchTerm || searchTerm.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/csv/search?q=${encodeURIComponent(searchTerm)}`);
+            const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+            
+            const players = data.players || [];
+            
+            if (players.length === 0) {
+                dropdown.innerHTML = '<div class="player-dropdown-item" style="color: var(--color-text-muted);">No players found</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            dropdown.innerHTML = players.slice(0, 10).map(player => 
+                `<div class="player-dropdown-item" data-player="${player.name.replace(/"/g, '&quot;')}">${player.name}</div>`
+            ).join('');
+            dropdown.style.display = 'block';
+            
+            dropdown.querySelectorAll('.player-dropdown-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const playerName = this.getAttribute('data-player');
+                    if (playerName && !playerName.includes('No players found')) {
+                        selectPlayer(playerName);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Search error:', error);
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    input.addEventListener('input', function(e) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(searchPlayers, 300);
+    });
+    
+    input.addEventListener('focus', function() {
+        if (this.value.trim().length >= 2) {
+            searchPlayers();
+        }
+    });
+    
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(searchTimeout);
+            const firstMatch = dropdown.querySelector('.player-dropdown-item[data-player]');
+            if (firstMatch && !firstMatch.textContent.includes('No players found')) {
+                firstMatch.click();
+            } else if (this.value.trim().length >= 2) {
+                selectPlayer(this.value.trim());
+            }
+        }
+    });
+    
+    document.addEventListener('click', function(e) {
+        if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+async function selectPlayer(playerName) {
+    selectedPlayer = { name: playerName };
+    document.getElementById('selectedPlayerName').textContent = playerName;
+    document.getElementById('selectedPlayerDisplay').style.display = 'flex';
+    const searchInput = document.getElementById('playerSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('playerSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    updateGenerateButton();
+    await loadPlayerSeasons(playerName);
+}
+
+function clearPlayerSelection() {
+    selectedPlayer = null;
+    document.getElementById('selectedPlayerDisplay').style.display = 'none';
+    document.getElementById('playerSearch').value = '';
+    updateGenerateButton();
+    
+    const seasonSelect = document.getElementById('seasonSelect');
+    if (seasonSelect) {
+        seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+    }
+}
+
+async function loadPlayerSeasons(playerName) {
+    try {
+        const encodedName = encodeURIComponent(playerName);
+        const response = await fetch(`/api/csv/player/${encodedName}/seasons`);
+        
+        if (!response.ok) {
+            const seasonSelect = document.getElementById('seasonSelect');
+            if (seasonSelect) {
+                seasonSelect.innerHTML = '<option value="">Error loading seasons</option>';
+            }
+            return;
+        }
+        
+        const data = await response.json();
+        const seasons = data.seasons || [];
+        
+        const seasonSelect = document.getElementById('seasonSelect');
+        if (!seasonSelect) return;
+        
+        seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+        
+        if (seasons.length === 0) {
+            seasonSelect.innerHTML = '<option value="">No seasons available</option>';
+        } else {
+            const sortedSeasons = [...seasons].sort((a, b) => {
+                const aInt = parseInt(a) || 0;
+                const bInt = parseInt(b) || 0;
+                return bInt - aInt;
+            });
+            
+            sortedSeasons.forEach(season => {
+                const option = document.createElement('option');
+                option.value = season;
+                option.textContent = season;
+                seasonSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading player seasons:', error);
+        const seasonSelect = document.getElementById('seasonSelect');
+        if (seasonSelect) {
+            seasonSelect.innerHTML = '<option value="">Error loading seasons</option>';
+        }
+    }
+}
+
+function setupGenerateButton() {
+    const btn = document.getElementById('generateComparison');
+    if (!btn) return;
+    
+    btn.addEventListener('click', async function(e) {
+        if (!selectedPlayer || this.classList.contains('disabled')) {
+            e.preventDefault();
+            return;
+        }
+        await generateComparison();
+    });
+}
+
+function updateGenerateButton() {
+    const btn = document.getElementById('generateComparison');
+    if (!btn) return;
+    
+    if (selectedPlayer) {
+        btn.classList.remove('disabled');
+        btn.disabled = false;
+    } else {
+        btn.classList.add('disabled');
+        btn.disabled = true;
+    }
+}
+
+async function generateComparison() {
+    if (!selectedPlayer) return;
+
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    const comparisonContent = document.getElementById('comparisonContent');
+    const errorText = document.getElementById('errorText');
+
+    // Show loading
+    loadingIndicator.style.display = 'block';
+    errorMessage.style.display = 'none';
+    comparisonContent.style.display = 'none';
+
+    try {
+        const season = document.getElementById('seasonSelect').value || null;
+        const pitchType = document.getElementById('pitchTypeSelect').value || null;
+        const pitcherHand = document.getElementById('pitcherHandSelect').value || null;
+        const count = document.getElementById('countSelect').value || null;
+
+        const params = new URLSearchParams({
+            player: selectedPlayer.name
+        });
+        if (season) params.append('season', season);
+        if (pitchType) params.append('pitch_type', pitchType);
+        if (pitcherHand) params.append('pitcher_hand', pitcherHand);
+        if (count) params.append('count', count);
+
+        const response = await fetch(`/api/visuals/expected-stats-comparison?${params.toString()}`);
+        const data = await response.json();
+
+        if (data.error) {
+            throw new Error(data.error);
+        }
+
+        // Hide loading, show content
+        loadingIndicator.style.display = 'none';
+        comparisonContent.style.display = 'block';
+
+        // Update summary
+        document.getElementById('playerTitle').textContent = `${selectedPlayer.name} - Expected vs Actual Stats`;
+        document.getElementById('totalPA').textContent = (data.summary?.total_pa || 0).toLocaleString();
+        document.getElementById('totalBB').textContent = (data.summary?.total_batted_balls || 0).toLocaleString();
+        document.getElementById('seasonDisplay').textContent = season || 'All Seasons';
+
+        // Render charts
+        renderComparisonCharts(data);
+
+    } catch (error) {
+        console.error('Error generating comparison:', error);
+        loadingIndicator.style.display = 'none';
+        errorMessage.style.display = 'block';
+        errorText.textContent = error.message || 'Failed to generate comparison';
+    }
+}
+
+function renderComparisonCharts(data) {
+    // Destroy existing charts
+    Object.values(comparisonCharts).forEach(chart => {
+        if (chart) chart.destroy();
+    });
+    comparisonCharts = {};
+
+    const stats = ['xwOBA', 'xBA', 'xSLG', 'xISO'];
+    stats.forEach(stat => {
+        const statKey = stat.toLowerCase();
+        const statData = data.stats[statKey];
+        
+        if (!statData) return;
+
+        // Update value displays
+        updateStatDisplay(statKey, statData);
+
+        // Create chart
+        const canvasId = `${statKey}Chart`;
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        
+        const chartData = {
+            labels: statData.time_series?.map(d => d.label) || [],
+            datasets: [
+                {
+                    label: 'Expected',
+                    data: statData.time_series?.map(d => d.expected) || [],
+                    borderColor: 'color-mix(in srgb, var(--color-success) 80%, #6ee7b7)',
+                    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                },
+                {
+                    label: 'Actual',
+                    data: statData.time_series?.map(d => d.actual) || [],
+                    borderColor: 'var(--color-accent)',
+                    backgroundColor: 'rgba(255, 127, 0, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                },
+                {
+                    label: 'Upper CI',
+                    data: statData.time_series?.map(d => d.ci_upper) || [],
+                    borderColor: 'rgba(76, 175, 80, 0.3)',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    fill: false
+                },
+                {
+                    label: 'Lower CI',
+                    data: statData.time_series?.map(d => d.ci_lower) || [],
+                    borderColor: 'rgba(76, 175, 80, 0.3)',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1,
+                    borderDash: [5, 5],
+                    pointRadius: 0,
+                    fill: false
+                }
+            ]
+        };
+
+        comparisonCharts[statKey] = new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            color: 'var(--color-text-muted)',
+                            font: { size: 11 },
+                            usePointStyle: true
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(10, 10, 10, 0.95)',
+                        titleColor: 'var(--color-accent)',
+                        bodyColor: 'var(--color-text-primary)',
+                        borderColor: 'var(--color-accent)',
+                        borderWidth: 1,
+                        padding: 12,
+                        callbacks: {
+                            label: function(context) {
+                                const value = context.parsed.y;
+                                if (value === null) return 'N/A';
+                                return `${context.dataset.label}: ${value.toFixed(3)}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time Period',
+                            color: 'var(--color-text-muted)'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: 'var(--color-text-muted)',
+                            font: { size: 10 },
+                            maxRotation: 45,
+                            minRotation: 45
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: stat,
+                            color: 'var(--color-text-muted)'
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)',
+                            drawBorder: false
+                        },
+                        ticks: {
+                            color: 'var(--color-text-muted)',
+                            font: { size: 11 },
+                            callback: function(value) {
+                                return value.toFixed(3);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    // Render trend chart
+    renderTrendChart(data);
+}
+
+function updateStatDisplay(statKey, statData) {
+    const expected = statData.expected || 0;
+    const actual = statData.actual || 0;
+    const diff = actual - expected;
+    const ciLower = statData.ci_lower || 0;
+    const ciUpper = statData.ci_upper || 0;
+
+    document.getElementById(`${statKey}Expected`).textContent = expected.toFixed(3);
+    document.getElementById(`${statKey}Actual`).textContent = actual.toFixed(3);
+    
+    const diffElement = document.getElementById(`${statKey}Diff`);
+    diffElement.textContent = (diff >= 0 ? '+' : '') + diff.toFixed(3);
+    diffElement.className = 'value-diff ' + (diff > 0 ? 'positive' : diff < 0 ? 'negative' : 'neutral');
+
+    // Update regression indicator
+    const indicator = document.getElementById(`${statKey}Indicator`);
+    if (actual > ciUpper) {
+        indicator.className = 'regression-indicator positive';
+        indicator.textContent = 'Overperforming';
+    } else if (actual < ciLower) {
+        indicator.className = 'regression-indicator negative';
+        indicator.textContent = 'Underperforming';
+    } else {
+        indicator.className = 'regression-indicator neutral';
+        indicator.textContent = 'Expected Range';
+    }
+}
+
+function renderTrendChart(data) {
+    const ctx = document.getElementById('trendChart').getContext('2d');
+    
+    const allStats = ['xwOBA', 'xBA', 'xSLG', 'xISO'];
+    const datasets = allStats.map(stat => {
+        const statKey = stat.toLowerCase();
+        const statData = data.stats[statKey];
+        if (!statData || !statData.time_series) return null;
+
+        const colors = {
+            'xwoba': 'var(--color-accent)',
+            'xba': 'color-mix(in srgb, var(--color-success) 80%, #6ee7b7)',
+            'xslg': '#2196F3',
+            'xiso': '#9C27B0'
+        };
+
+        return {
+            label: `Expected ${stat}`,
+            data: statData.time_series.map(d => d.expected),
+            borderColor: colors[statKey],
+            backgroundColor: colors[statKey] + '20',
+            borderWidth: 2,
+            fill: false,
+            tension: 0.4,
+            pointRadius: 3
+        };
+    }).filter(d => d !== null);
+
+    const labels = data.stats.xwoba?.time_series?.map(d => d.label) || [];
+
+    comparisonCharts.trend = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: {
+                        color: 'var(--color-text-muted)',
+                        font: { size: 11 },
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    backgroundColor: 'rgba(10, 10, 10, 0.95)',
+                    titleColor: 'var(--color-accent)',
+                    bodyColor: 'var(--color-text-primary)',
+                    borderColor: 'var(--color-accent)',
+                    borderWidth: 1,
+                    padding: 12
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time Period',
+                        color: 'var(--color-text-muted)'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: 'var(--color-text-muted)',
+                        font: { size: 10 },
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Expected Stats',
+                        color: 'var(--color-text-muted)'
+                    },
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.1)',
+                        drawBorder: false
+                    },
+                    ticks: {
+                        color: 'var(--color-text-muted)',
+                        font: { size: 11 }
+                    }
+                }
+            }
+        }
+    });
+}
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+    color: var(--color-text-primary);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-page-bg) 85%, white), var(--color-page-bg));
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-border);
+    color: var(--color-text-primary);
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+    border: 1px solid var(--color-border-strong);
+}
+
+.back-button:hover {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    transform: translateY(-2px);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.expected-stats-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    background: var(--color-layer-card);
+    padding: 1.5rem;
+    border-radius: 16px;
+    border: 1px solid var(--color-layer-border);
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-floating);
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.control-group-full {
+    grid-column: 1 / -1;
+}
+
+.control-label {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.control-input,
+.control-select {
+    padding: 0.75rem;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+}
+
+.control-input:focus,
+.control-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgba(255, 127, 0, 0.1);
+}
+
+.player-search-container {
+    position: relative;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    margin-top: 0.25rem;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.player-dropdown-item {
+    padding: 0.75rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-border);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+}
+
+.selected-player-display span {
+    color: var(--color-accent);
+    font-weight: 500;
+}
+
+.clear-player-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    background: var(--color-border-strong);
+    color: var(--color-text-primary);
+}
+
+.generate-btn {
+    grid-column: 1 / -1;
+    padding: 1rem;
+    background: var(--color-accent);
+    color: var(--color-text-primary);
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.generate-btn:hover:not(.disabled) {
+    background: var(--color-accent-bright);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.3);
+}
+
+.generate-btn.disabled {
+    background: var(--color-border-strong);
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.loading-indicator {
+    text-align: center;
+    padding: 3rem;
+    color: var(--color-text-muted);
+}
+
+.spinner {
+    border: 4px solid var(--color-border);
+    border-top: 4px solid var(--color-accent);
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 1rem;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-message {
+    background: #2a1a1a;
+    border: 2px solid #cc0000;
+    border-radius: 8px;
+    padding: 1rem;
+    color: #ff6b6b;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+}
+
+.comparison-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.summary-section {
+    background: var(--color-layer-card);
+    padding: 1.5rem;
+    border-radius: 16px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-floating);
+}
+
+.summary-section h2 {
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.summary-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--color-layer-soft);
+    padding: 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.stat-label {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    color: var(--color-accent);
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.stats-comparison-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 1.5rem;
+}
+
+.stat-comparison-card {
+    background: var(--color-layer-card);
+    padding: 1.5rem;
+    border-radius: 16px;
+    border: 1px solid var(--color-layer-border);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    box-shadow: var(--shadow-floating);
+}
+
+.comparison-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.comparison-header h3 {
+    color: var(--color-text-primary);
+    font-size: 1.25rem;
+    margin: 0;
+}
+
+.regression-indicator {
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.regression-indicator.positive {
+    background: rgba(76, 175, 80, 0.2);
+    color: color-mix(in srgb, var(--color-success) 80%, #6ee7b7);
+    border: 1px solid color-mix(in srgb, var(--color-success) 80%, #6ee7b7);
+}
+
+.regression-indicator.negative {
+    background: rgba(244, 67, 54, 0.2);
+    color: var(--color-danger);
+    border: 1px solid var(--color-danger);
+}
+
+.regression-indicator.neutral {
+    background: rgba(158, 158, 158, 0.2);
+    color: #9e9e9e;
+    border: 1px solid #9e9e9e;
+}
+
+.comparison-values {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.value-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1;
+    min-width: 100px;
+}
+
+.value-label {
+    color: var(--color-text-muted);
+    font-size: 0.8rem;
+}
+
+.value-expected,
+.value-actual,
+.value-diff {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+.value-expected {
+    color: color-mix(in srgb, var(--color-success) 80%, #6ee7b7);
+}
+
+.value-actual {
+    color: var(--color-accent);
+}
+
+.value-diff.positive {
+    color: color-mix(in srgb, var(--color-success) 80%, #6ee7b7);
+}
+
+.value-diff.negative {
+    color: var(--color-danger);
+}
+
+.value-diff.neutral {
+    color: #9e9e9e;
+}
+
+.comparison-chart {
+    height: 200px;
+    margin-top: 1rem;
+}
+
+.trend-section {
+    background: var(--color-layer-card);
+    padding: 1.5rem;
+    border-radius: 16px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-floating);
+}
+
+.trend-section h3 {
+    color: var(--color-text-primary);
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.trend-chart {
+    height: 400px;
+}
+
+.comparison-info {
+    background: var(--color-layer-soft);
+    padding: 1rem;
+    border-radius: 10px;
+    border: 1px solid var(--color-layer-border);
+    color: var(--color-text-muted);
+    text-align: center;
+    box-shadow: var(--shadow-floating);
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .header-content {
+        flex-direction: column;
+    }
+    
+    .stats-comparison-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .expected-stats-controls {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+

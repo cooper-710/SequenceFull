@@ -1,0 +1,1780 @@
+{% extends "base.html" %}
+
+{% block title %}Pitch Mix Analysis - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Pitch Mix Analysis</h1>
+                <p class="page-subtitle">Comprehensive breakdown of pitcher pitch mix patterns by count, situation, and batter handedness with effectiveness metrics</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="pitchmix-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Pitcher Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="pitcherSearch" 
+                        class="control-input" 
+                        placeholder="Type to search pitchers..."
+                        autocomplete="off"
+                    >
+                    <div id="pitcherSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedPitcherDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedPitcherName"></span>
+                    <button id="clearPitcher" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <button id="generateAnalysis" class="generate-btn" type="button">
+                <i class="fas fa-chart-pie"></i> Generate Analysis
+            </button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading pitch mix data...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error-message" style="display: none;">
+            <i class="fas fa-exclamation-circle"></i>
+            <span id="errorText"></span>
+        </div>
+
+        <!-- Main Analysis Content -->
+        <div id="analysisContent" class="analysis-content" style="display: none;">
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <h2 id="pitcherTitle"></h2>
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Pitches</div>
+                        <div class="stat-value" id="totalPitches">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Pitcher Hand</div>
+                        <div class="stat-value" id="pitcherHand">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Season</div>
+                        <div class="stat-value" id="seasonDisplay">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="tab-navigation">
+                <button class="tab-btn active" data-tab="overall">Overall</button>
+                <button class="tab-btn" data-tab="count">By Count</button>
+                <button class="tab-btn" data-tab="situation">By Situation</button>
+                <button class="tab-btn" data-tab="batter-hand">By Batter Hand</button>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="tab-content">
+                <!-- Overall Tab -->
+                <div id="tab-overall" class="tab-pane active">
+                    <div class="chart-container">
+                        <h3>Overall Pitch Mix</h3>
+                        <canvas id="overallChart"></canvas>
+                    </div>
+                    <div class="metrics-table-container">
+                        <h3>Pitch Effectiveness Metrics</h3>
+                        <table id="overallMetricsTable" class="metrics-table">
+                            <thead>
+                                <tr>
+                                    <th>Pitch Type</th>
+                                    <th>Usage %</th>
+                                    <th>Pitches</th>
+                                    <th>Strike %</th>
+                                    <th>Swing %</th>
+                                    <th>Whiff %</th>
+                                    <th>Zone %</th>
+                                    <th>xwOBA</th>
+                                    <th>Avg Velo</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- By Count Tab -->
+                <div id="tab-count" class="tab-pane">
+                    <div class="chart-container">
+                        <h3>Pitch Mix by Count</h3>
+                        <canvas id="countChart"></canvas>
+                    </div>
+                    <div class="effectiveness-viz-container">
+                        <div class="effectiveness-header">
+                            <h3>Pitch Effectiveness Heatmap by Count</h3>
+                            <div class="metric-selector">
+                                <label>Metric:</label>
+                                <select id="countMetricSelect" class="metric-select">
+                                    <option value="whiff_rate">Whiff Rate</option>
+                                    <option value="swing_rate">Swing Rate</option>
+                                    <option value="strike_rate">Strike Rate</option>
+                                    <option value="zone_rate">Zone Rate</option>
+                                    <option value="xwoba">xwOBA</option>
+                                    <option value="usage_pct">Usage %</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="small-multiples-container">
+                            <div id="smallMultiplesCharts" class="small-multiples-grid"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- By Situation Tab -->
+                <div id="tab-situation" class="tab-pane">
+                    <div class="chart-container">
+                        <h3>Pitch Mix by Situation</h3>
+                        <canvas id="situationChart"></canvas>
+                    </div>
+                    <div class="effectiveness-viz-container">
+                        <div class="effectiveness-header">
+                            <h3>Pitch Effectiveness by Situation</h3>
+                            <div class="metric-selector">
+                                <label>Metric:</label>
+                                <select id="situationMetricSelect" class="metric-select">
+                                    <option value="whiff_rate">Whiff Rate</option>
+                                    <option value="swing_rate">Swing Rate</option>
+                                    <option value="strike_rate">Strike Rate</option>
+                                    <option value="zone_rate">Zone Rate</option>
+                                    <option value="xwoba">xwOBA</option>
+                                    <option value="usage_pct">Usage %</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="small-multiples-container">
+                            <div id="situationMultiplesCharts" class="small-multiples-grid"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- By Batter Hand Tab -->
+                <div id="tab-batter-hand" class="tab-pane">
+                    <div class="chart-container">
+                        <h3>Pitch Mix by Batter Handedness</h3>
+                        <canvas id="batterHandChart"></canvas>
+                    </div>
+                    <div class="effectiveness-viz-container">
+                        <div class="effectiveness-header">
+                            <h3>Pitch Effectiveness by Batter Handedness</h3>
+                            <div class="metric-selector">
+                                <label>Metric:</label>
+                                <select id="batterHandMetricSelect" class="metric-select">
+                                    <option value="whiff_rate">Whiff Rate</option>
+                                    <option value="swing_rate">Swing Rate</option>
+                                    <option value="strike_rate">Strike Rate</option>
+                                    <option value="zone_rate">Zone Rate</option>
+                                    <option value="xwoba">xwOBA</option>
+                                    <option value="usage_pct">Usage %</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="small-multiples-container">
+                            <div id="batterHandMultiplesCharts" class="small-multiples-grid"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Pitch type colors
+const PITCH_COLORS = {
+    "FF": "#FF0000", "FT": "#8B0000", "SI": "#FFA500", "FC": "#808080",
+    "SL": "var(--color-main-bg)0FF", "CU": "#800080", "CH": "#008000", "FS": "#00FFFF",
+    "KC": "#4B0082", "KN": "#D3D3D3", "ST": "#008080", "SV": "#4682B4",
+    "PO": "#A52A2A", "IN": "#F0E68C", "UN": "#B0C4DE", "CS": "#800000"
+};
+
+// Pitch type labels
+const PITCH_LABELS = {
+    "FF": "Four-Seam", "FT": "Two-Seam", "SI": "Sinker", "FC": "Cutter",
+    "SL": "Slider", "CU": "Curveball", "CH": "Changeup", "FS": "Splitter",
+    "KC": "Knuckle Curve", "KN": "Knuckleball", "ST": "Sweeper", "SV": "Slurve"
+};
+
+let selectedPitcher = null;
+let analysisData = null;
+let charts = {};
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadFilterOptions();
+    setupPitcherSearch();
+    
+    document.getElementById('generateAnalysis').addEventListener('click', function() {
+        if (!selectedPitcher) {
+            alert('Please select a pitcher first');
+            return;
+        }
+        generateAnalysis();
+    });
+
+    document.getElementById('clearPitcher').addEventListener('click', function() {
+        clearPitcherSelection();
+    });
+
+    // Tab navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const tabName = this.dataset.tab;
+            switchTab(tabName);
+        });
+    });
+
+    // Filter select handlers
+    document.getElementById('countMetricSelect').addEventListener('change', function() {
+        updateCountHeatmap();
+    });
+
+    document.getElementById('situationMetricSelect').addEventListener('change', function() {
+        updateSituationCharts();
+    });
+
+    document.getElementById('batterHandMetricSelect').addEventListener('change', function() {
+        updateBatterHandCharts();
+    });
+});
+
+async function loadFilterOptions() {
+    // Season options
+    const currentYear = new Date().getFullYear();
+    const seasonSelect = document.getElementById('seasonSelect');
+    for (let year = currentYear; year >= 2015; year--) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        seasonSelect.appendChild(option);
+    }
+}
+
+function setupPitcherSearch() {
+    const searchInput = document.getElementById('pitcherSearch');
+    const dropdown = document.getElementById('pitcherSearchDropdown');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        searchTimeout = setTimeout(async () => {
+            try {
+                const response = await fetch(`/api/csv/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.players && data.players.length > 0) {
+                    dropdown.innerHTML = '';
+                    data.players.slice(0, 10).forEach(player => {
+                        const item = document.createElement('div');
+                        item.className = 'player-dropdown-item';
+                        item.textContent = player.name || player;
+                        item.addEventListener('click', function() {
+                            selectPitcher(player.name || player);
+                            dropdown.style.display = 'none';
+                            searchInput.value = '';
+                        });
+                        dropdown.appendChild(item);
+                    });
+                    dropdown.style.display = 'block';
+                } else {
+                    dropdown.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error searching pitchers:', error);
+            }
+        }, 300);
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+function selectPitcher(name) {
+    selectedPitcher = name;
+    const searchInput = document.getElementById('pitcherSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('pitcherSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    document.getElementById('selectedPitcherName').textContent = name;
+    document.getElementById('selectedPitcherDisplay').style.display = 'flex';
+    document.getElementById('generateAnalysis').classList.remove('disabled');
+    
+    // Load seasons for this pitcher
+    loadPitcherSeasons(name);
+}
+
+function clearPitcherSelection() {
+    selectedPitcher = null;
+    document.getElementById('selectedPitcherDisplay').style.display = 'none';
+    document.getElementById('generateAnalysis').classList.add('disabled');
+    document.getElementById('analysisContent').style.display = 'none';
+    document.getElementById('seasonSelect').innerHTML = '<option value="">All Seasons</option>';
+}
+
+async function loadPitcherSeasons(pitcherName) {
+    try {
+        const response = await fetch(`/api/pitcher/${encodeURIComponent(pitcherName)}/seasons`);
+        const data = await response.json();
+        
+        const seasonSelect = document.getElementById('seasonSelect');
+        seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+        
+        if (data.seasons && data.seasons.length > 0) {
+            data.seasons.forEach(season => {
+                const option = document.createElement('option');
+                option.value = season;
+                option.textContent = season;
+                seasonSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading seasons:', error);
+    }
+}
+
+async function generateAnalysis() {
+    const season = document.getElementById('seasonSelect').value;
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    const analysisContent = document.getElementById('analysisContent');
+    
+    // Hide previous content
+    errorMessage.style.display = 'none';
+    analysisContent.style.display = 'none';
+    loadingIndicator.style.display = 'flex';
+    
+    try {
+        let url = `/api/visuals/pitch-mix-analysis?pitcher=${encodeURIComponent(selectedPitcher)}`;
+        if (season) {
+            url += `&season=${season}`;
+        }
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        analysisData = data;
+        displayAnalysis(data);
+        loadingIndicator.style.display = 'none';
+        analysisContent.style.display = 'block';
+    } catch (error) {
+        loadingIndicator.style.display = 'none';
+        errorMessage.style.display = 'flex';
+        document.getElementById('errorText').textContent = error.message;
+        console.error('Error generating analysis:', error);
+    }
+}
+
+function displayAnalysis(data) {
+    // Update summary
+    document.getElementById('pitcherTitle').textContent = data.pitcher;
+    document.getElementById('totalPitches').textContent = data.total_pitches.toLocaleString();
+    document.getElementById('pitcherHand').textContent = data.pitcher_hand === 'R' ? 'Right' : 'Left';
+    document.getElementById('seasonDisplay').textContent = data.season || 'All Seasons';
+    
+    // Display overall tab
+    displayOverallTab(data.breakdowns.overall);
+    displayCountTab(data.breakdowns.by_count);
+    displaySituationTab(data.breakdowns.by_situation);
+    displayBatterHandTab(data.breakdowns.by_batter_hand);
+}
+
+function displayOverallTab(overallData) {
+    // Create overall chart
+    const ctx = document.getElementById('overallChart').getContext('2d');
+    
+    if (charts.overall) {
+        charts.overall.destroy();
+    }
+    
+    const pitchTypes = Object.keys(overallData.by_pitch_type);
+    const usagePercentages = pitchTypes.map(pt => overallData.by_pitch_type[pt].usage_pct);
+    const colors = pitchTypes.map(pt => PITCH_COLORS[pt] || 'var(--color-text-secondary)');
+    const labels = pitchTypes.map(pt => `${PITCH_LABELS[pt] || pt} (${usagePercentages[pitchTypes.indexOf(pt)].toFixed(1)}%)`);
+    
+    charts.overall = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: pitchTypes.map(pt => PITCH_LABELS[pt] || pt),
+            datasets: [{
+                label: 'Usage %',
+                data: usagePercentages,
+                backgroundColor: colors,
+                borderColor: colors.map(c => c),
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Update metrics table
+    updateOverallMetricsTable(overallData.by_pitch_type);
+}
+
+function displayCountTab(countData) {
+    // Create count chart (stacked bar chart)
+    const ctx = document.getElementById('countChart').getContext('2d');
+    
+    if (charts.count) {
+        charts.count.destroy();
+    }
+    
+    // Get all unique counts and pitch types
+    // Sort counts in standard order: 0-0, 1-0, 0-1, 1-1, 2-0, 2-1, 1-2, 2-2, 3-0, 3-1, 3-2, 0-2
+    const countOrder = ['0-0', '1-0', '0-1', '1-1', '2-0', '2-1', '1-2', '2-2', '3-0', '3-1', '3-2', '0-2'];
+    const counts = Object.keys(countData).sort((a, b) => {
+        const idxA = countOrder.indexOf(a);
+        const idxB = countOrder.indexOf(b);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        // Fallback to numeric sorting
+        const [b1, s1] = a.split('-').map(Number);
+        const [b2, s2] = b.split('-').map(Number);
+        if (b1 !== b2) return b1 - b2;
+        return s1 - s2;
+    });
+    
+    const allPitchTypes = new Set();
+    counts.forEach(count => {
+        Object.keys(countData[count].by_pitch_type).forEach(pt => allPitchTypes.add(pt));
+    });
+    const pitchTypes = Array.from(allPitchTypes);
+    
+    // Prepare datasets
+    const datasets = pitchTypes.map(pitchType => {
+        const data = counts.map(count => {
+            const pitchData = countData[count].by_pitch_type[pitchType];
+            return pitchData ? pitchData.usage_pct : 0;
+        });
+        
+        return {
+            label: PITCH_LABELS[pitchType] || pitchType,
+            data: data,
+            backgroundColor: PITCH_COLORS[pitchType] || 'var(--color-text-secondary)'
+        };
+    });
+    
+    charts.count = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: counts,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'right'
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    // Store count data for heatmap
+    window.countData = countData;
+    updateCountHeatmap();
+}
+
+function updateCountHeatmap() {
+    if (!window.countData) return;
+    
+    const metric = document.getElementById('countMetricSelect').value;
+    const container = document.getElementById('smallMultiplesCharts');
+    
+    // Destroy existing charts
+    if (charts.smallMultiples) {
+        charts.smallMultiples.forEach(chart => chart.destroy());
+    }
+    charts.smallMultiples = [];
+    
+    // Get all unique counts and pitch types
+    const countOrder = ['0-0', '1-0', '0-1', '1-1', '2-0', '2-1', '1-2', '2-2', '3-0', '3-1', '3-2', '0-2'];
+    const counts = Object.keys(window.countData).sort((a, b) => {
+        const idxA = countOrder.indexOf(a);
+        const idxB = countOrder.indexOf(b);
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+        if (idxA !== -1) return -1;
+        if (idxB !== -1) return 1;
+        const [b1, s1] = a.split('-').map(Number);
+        const [b2, s2] = b.split('-').map(Number);
+        if (b1 !== b2) return b1 - b2;
+        return s1 - s2;
+    });
+    
+    const allPitchTypes = new Set();
+    counts.forEach(count => {
+        Object.keys(window.countData[count].by_pitch_type).forEach(pt => allPitchTypes.add(pt));
+    });
+    const pitchTypes = Array.from(allPitchTypes).sort();
+    
+    // Collect all values for global min/max
+    const allValues = [];
+    const dataByPitchType = {};
+    
+    pitchTypes.forEach(pt => {
+        const data = [];
+        counts.forEach(count => {
+            const pitchData = window.countData[count].by_pitch_type[pt];
+            let value = null;
+            
+            if (pitchData) {
+                if (metric === 'whiff_rate') {
+                    value = pitchData.whiff_rate !== null ? pitchData.whiff_rate : null;
+                } else if (metric === 'swing_rate') {
+                    value = pitchData.swing_rate;
+                } else if (metric === 'strike_rate') {
+                    value = pitchData.strike_rate;
+                } else if (metric === 'zone_rate') {
+                    value = pitchData.zone_rate;
+                } else if (metric === 'xwoba') {
+                    value = pitchData.xwoba !== null ? pitchData.xwoba : null;
+                } else if (metric === 'usage_pct') {
+                    value = pitchData.usage_pct;
+                }
+            }
+            
+            data.push(value);
+            if (value !== null) {
+                allValues.push(value);
+            }
+        });
+        dataByPitchType[pt] = data;
+    });
+    
+    // Calculate global min/max for consistent scaling
+    const validValues = allValues.filter(v => v !== null && v !== undefined);
+    const globalMin = validValues.length > 0 ? Math.min(...validValues) : 0;
+    const globalMax = validValues.length > 0 ? Math.max(...validValues) : 100;
+    
+    // Clear container
+    container.innerHTML = '';
+    
+    // Create a small chart for each pitch type
+    pitchTypes.forEach((pt, idx) => {
+        const chartWrapper = document.createElement('div');
+        chartWrapper.className = 'small-multiple-card';
+        chartWrapper.innerHTML = `
+            <div class="small-multiple-header">
+                <h4>${PITCH_LABELS[pt] || pt}</h4>
+                <span class="pitch-color-indicator" style="background-color: ${PITCH_COLORS[pt] || '#999'}"></span>
+            </div>
+            <div class="small-multiple-chart">
+                <canvas id="chart-${idx}"></canvas>
+            </div>
+        `;
+        container.appendChild(chartWrapper);
+        
+        const ctx = document.getElementById(`chart-${idx}`).getContext('2d');
+        const data = dataByPitchType[pt];
+        
+        // Get color for this pitch type
+        const pitchColor = PITCH_COLORS[pt] || '#999';
+        
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: counts,
+                datasets: [{
+                    label: getMetricLabel(metric),
+                    data: data,
+                    borderColor: pitchColor,
+                    backgroundColor: pitchColor + '40', // 25% opacity
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: pitchColor,
+                    pointBorderColor: 'var(--color-text-primary)',
+                    pointBorderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: 'var(--color-text-primary)',
+                        bodyColor: 'var(--color-text-primary)',
+                        borderColor: pitchColor,
+                        borderWidth: 1,
+                        callbacks: {
+                            label: function(context) {
+                                const value = context.parsed.y;
+                                if (value === null || value === undefined) return 'N/A';
+                                if (metric === 'xwoba') {
+                                    return value.toFixed(3);
+                                } else if (metric === 'usage_pct' || metric.includes('rate')) {
+                                    return value.toFixed(1) + '%';
+                                }
+                                return value.toFixed(1);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: 'var(--color-text-muted)',
+                            font: {
+                                size: 10
+                            },
+                            maxRotation: 45,
+                            minRotation: 45
+                        },
+                        grid: {
+                            color: 'var(--color-border)',
+                            display: false
+                        }
+                    },
+                    y: {
+                        min: globalMin,
+                        max: globalMax,
+                        ticks: {
+                            color: 'var(--color-text-muted)',
+                            font: {
+                                size: 10
+                            },
+                            callback: function(value) {
+                                if (metric === 'xwoba') {
+                                    return value.toFixed(2);
+                                }
+                                return value.toFixed(0) + (metric === 'usage_pct' || metric.includes('rate') ? '%' : '');
+                            }
+                        },
+                        grid: {
+                            color: 'var(--color-border)'
+                        }
+                    }
+                }
+            }
+        });
+        
+        charts.smallMultiples.push(chart);
+    });
+}
+
+function getMetricLabel(metric) {
+    const labels = {
+        'whiff_rate': 'Whiff Rate (%)',
+        'swing_rate': 'Swing Rate (%)',
+        'strike_rate': 'Strike Rate (%)',
+        'zone_rate': 'Zone Rate (%)',
+        'xwoba': 'xwOBA',
+        'usage_pct': 'Usage (%)'
+    };
+    return labels[metric] || metric;
+}
+
+function displaySituationTab(situationData) {
+    const ctx = document.getElementById('situationChart').getContext('2d');
+    
+    if (charts.situation) {
+        charts.situation.destroy();
+    }
+    
+    const situations = Object.keys(situationData);
+    const allPitchTypes = new Set();
+    situations.forEach(sit => {
+        Object.keys(situationData[sit].by_pitch_type).forEach(pt => allPitchTypes.add(pt));
+    });
+    const pitchTypes = Array.from(allPitchTypes);
+    
+    const datasets = pitchTypes.map(pitchType => {
+        const data = situations.map(sit => {
+            const pitchData = situationData[sit].by_pitch_type[pitchType];
+            return pitchData ? pitchData.usage_pct : 0;
+        });
+        
+        return {
+            label: PITCH_LABELS[pitchType] || pitchType,
+            data: data,
+            backgroundColor: PITCH_COLORS[pitchType] || 'var(--color-text-secondary)'
+        };
+    });
+    
+    charts.situation = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: situations,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'right'
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    window.situationData = situationData;
+    updateSituationCharts();
+}
+
+function updateSituationCharts() {
+    if (!window.situationData) return;
+    
+    const metric = document.getElementById('situationMetricSelect').value;
+    const container = document.getElementById('situationMultiplesCharts');
+    
+    // Destroy existing charts
+    if (charts.situationMultiples) {
+        charts.situationMultiples.forEach(chart => chart.destroy());
+    }
+    charts.situationMultiples = [];
+    
+    const situations = Object.keys(window.situationData);
+    const allPitchTypes = new Set();
+    situations.forEach(sit => {
+        Object.keys(window.situationData[sit].by_pitch_type).forEach(pt => allPitchTypes.add(pt));
+    });
+    const pitchTypes = Array.from(allPitchTypes).sort();
+    
+    // Collect all values for global min/max
+    const allValues = [];
+    const dataByPitchType = {};
+    
+    pitchTypes.forEach(pt => {
+        const data = [];
+        situations.forEach(sit => {
+            const pitchData = window.situationData[sit].by_pitch_type[pt];
+            let value = null;
+            
+            if (pitchData) {
+                if (metric === 'whiff_rate') {
+                    value = pitchData.whiff_rate !== null ? pitchData.whiff_rate : null;
+                } else if (metric === 'swing_rate') {
+                    value = pitchData.swing_rate;
+                } else if (metric === 'strike_rate') {
+                    value = pitchData.strike_rate;
+                } else if (metric === 'zone_rate') {
+                    value = pitchData.zone_rate;
+                } else if (metric === 'xwoba') {
+                    value = pitchData.xwoba !== null ? pitchData.xwoba : null;
+                } else if (metric === 'usage_pct') {
+                    value = pitchData.usage_pct;
+                }
+            }
+            
+            data.push(value);
+            if (value !== null) {
+                allValues.push(value);
+            }
+        });
+        dataByPitchType[pt] = data;
+    });
+    
+    // Calculate global min/max for consistent scaling
+    const validValues = allValues.filter(v => v !== null && v !== undefined);
+    const globalMin = validValues.length > 0 ? Math.min(...validValues) : 0;
+    const globalMax = validValues.length > 0 ? Math.max(...validValues) : 100;
+    
+    // Clear container
+    container.innerHTML = '';
+    
+    // Create a small chart for each pitch type
+    pitchTypes.forEach((pt, idx) => {
+        const chartWrapper = document.createElement('div');
+        chartWrapper.className = 'small-multiple-card';
+        chartWrapper.innerHTML = `
+            <div class="small-multiple-header">
+                <h4>${PITCH_LABELS[pt] || pt}</h4>
+                <span class="pitch-color-indicator" style="background-color: ${PITCH_COLORS[pt] || '#999'}"></span>
+            </div>
+            <div class="small-multiple-chart">
+                <canvas id="situation-chart-${idx}"></canvas>
+            </div>
+        `;
+        container.appendChild(chartWrapper);
+        
+        const ctx = document.getElementById(`situation-chart-${idx}`).getContext('2d');
+        const data = dataByPitchType[pt];
+        
+        // Get color for this pitch type
+        const pitchColor = PITCH_COLORS[pt] || '#999';
+        
+        // Shorten situation labels for better display
+        const shortLabels = situations.map(sit => {
+            if (sit === 'Bases Empty') return 'Empty';
+            if (sit === 'Bases Loaded') return 'Loaded';
+            if (sit === 'Runner on 1st') return '1st';
+            if (sit === 'Runner on 2nd') return '2nd';
+            if (sit === 'Runner on 3rd') return '3rd';
+            if (sit === 'Runners on 1st & 2nd') return '1st & 2nd';
+            if (sit === 'Runners on 1st & 3rd') return '1st & 3rd';
+            if (sit === 'Runners on 2nd & 3rd') return '2nd & 3rd';
+            return sit;
+        });
+        
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: shortLabels,
+                datasets: [{
+                    label: getMetricLabel(metric),
+                    data: data,
+                    backgroundColor: pitchColor,
+                    borderColor: pitchColor,
+                    borderWidth: 2,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: 'var(--color-text-primary)',
+                        bodyColor: 'var(--color-text-primary)',
+                        borderColor: pitchColor,
+                        borderWidth: 1,
+                        callbacks: {
+                            title: function(context) {
+                                return situations[context[0].dataIndex];
+                            },
+                            label: function(context) {
+                                const value = context.parsed.y;
+                                if (value === null || value === undefined) return 'N/A';
+                                if (metric === 'xwoba') {
+                                    return value.toFixed(3);
+                                } else if (metric === 'usage_pct' || metric.includes('rate')) {
+                                    return value.toFixed(1) + '%';
+                                }
+                                return value.toFixed(1);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: 'var(--color-text-muted)',
+                            font: {
+                                size: 10
+                            },
+                            maxRotation: 45,
+                            minRotation: 45
+                        },
+                        grid: {
+                            color: 'var(--color-border)',
+                            display: false
+                        }
+                    },
+                    y: {
+                        min: globalMin,
+                        max: globalMax,
+                        ticks: {
+                            color: 'var(--color-text-muted)',
+                            font: {
+                                size: 10
+                            },
+                            callback: function(value) {
+                                if (metric === 'xwoba') {
+                                    return value.toFixed(2);
+                                }
+                                return value.toFixed(0) + (metric === 'usage_pct' || metric.includes('rate') ? '%' : '');
+                            }
+                        },
+                        grid: {
+                            color: 'var(--color-border)'
+                        }
+                    }
+                }
+            }
+        });
+        
+        charts.situationMultiples.push(chart);
+    });
+}
+
+function displayBatterHandTab(batterHandData) {
+    const ctx = document.getElementById('batterHandChart').getContext('2d');
+    
+    if (charts.batterHand) {
+        charts.batterHand.destroy();
+    }
+    
+    const hands = Object.keys(batterHandData);
+    const allPitchTypes = new Set();
+    hands.forEach(hand => {
+        Object.keys(batterHandData[hand].by_pitch_type).forEach(pt => allPitchTypes.add(pt));
+    });
+    const pitchTypes = Array.from(allPitchTypes);
+    
+    const datasets = pitchTypes.map(pitchType => {
+        const data = hands.map(hand => {
+            const pitchData = batterHandData[hand].by_pitch_type[pitchType];
+            return pitchData ? pitchData.usage_pct : 0;
+        });
+        
+        return {
+            label: PITCH_LABELS[pitchType] || pitchType,
+            data: data,
+            backgroundColor: PITCH_COLORS[pitchType] || 'var(--color-text-secondary)'
+        };
+    });
+    
+    charts.batterHand = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: hands.map(h => h === 'R' ? 'Right-Handed' : 'Left-Handed'),
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'right'
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+    
+    window.batterHandData = batterHandData;
+    updateBatterHandCharts();
+}
+
+function updateBatterHandCharts() {
+    if (!window.batterHandData) return;
+    
+    const metric = document.getElementById('batterHandMetricSelect').value;
+    const container = document.getElementById('batterHandMultiplesCharts');
+    
+    // Destroy existing charts
+    if (charts.batterHandMultiples) {
+        charts.batterHandMultiples.forEach(chart => chart.destroy());
+    }
+    charts.batterHandMultiples = [];
+    
+    const hands = Object.keys(window.batterHandData).sort(); // R, L
+    const allPitchTypes = new Set();
+    hands.forEach(hand => {
+        Object.keys(window.batterHandData[hand].by_pitch_type).forEach(pt => allPitchTypes.add(pt));
+    });
+    const pitchTypes = Array.from(allPitchTypes).sort();
+    
+    // Collect all values for global min/max
+    const allValues = [];
+    const dataByPitchType = {};
+    
+    pitchTypes.forEach(pt => {
+        const data = [];
+        hands.forEach(hand => {
+            const pitchData = window.batterHandData[hand].by_pitch_type[pt];
+            let value = null;
+            
+            if (pitchData) {
+                if (metric === 'whiff_rate') {
+                    value = pitchData.whiff_rate !== null ? pitchData.whiff_rate : null;
+                } else if (metric === 'swing_rate') {
+                    value = pitchData.swing_rate;
+                } else if (metric === 'strike_rate') {
+                    value = pitchData.strike_rate;
+                } else if (metric === 'zone_rate') {
+                    value = pitchData.zone_rate;
+                } else if (metric === 'xwoba') {
+                    value = pitchData.xwoba !== null ? pitchData.xwoba : null;
+                } else if (metric === 'usage_pct') {
+                    value = pitchData.usage_pct;
+                }
+            }
+            
+            data.push(value);
+            if (value !== null) {
+                allValues.push(value);
+            }
+        });
+        dataByPitchType[pt] = data;
+    });
+    
+    // Calculate global min/max for consistent scaling
+    const validValues = allValues.filter(v => v !== null && v !== undefined);
+    const globalMin = validValues.length > 0 ? Math.min(...validValues) : 0;
+    const globalMax = validValues.length > 0 ? Math.max(...validValues) : 100;
+    
+    // Clear container
+    container.innerHTML = '';
+    
+    // Create a small chart for each pitch type
+    pitchTypes.forEach((pt, idx) => {
+        const chartWrapper = document.createElement('div');
+        chartWrapper.className = 'small-multiple-card';
+        chartWrapper.innerHTML = `
+            <div class="small-multiple-header">
+                <h4>${PITCH_LABELS[pt] || pt}</h4>
+                <span class="pitch-color-indicator" style="background-color: ${PITCH_COLORS[pt] || '#999'}"></span>
+            </div>
+            <div class="small-multiple-chart">
+                <canvas id="batterhand-chart-${idx}"></canvas>
+            </div>
+        `;
+        container.appendChild(chartWrapper);
+        
+        const ctx = document.getElementById(`batterhand-chart-${idx}`).getContext('2d');
+        const data = dataByPitchType[pt];
+        
+        // Get color for this pitch type
+        const pitchColor = PITCH_COLORS[pt] || '#999';
+        
+        const chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: hands.map(h => h === 'R' ? 'RHH' : 'LHH'),
+                datasets: [{
+                    label: getMetricLabel(metric),
+                    data: data,
+                    backgroundColor: [pitchColor, pitchColor + '80'], // Second bar slightly transparent
+                    borderColor: pitchColor,
+                    borderWidth: 2,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        titleColor: 'var(--color-text-primary)',
+                        bodyColor: 'var(--color-text-primary)',
+                        borderColor: pitchColor,
+                        borderWidth: 1,
+                        callbacks: {
+                            title: function(context) {
+                                const hand = hands[context[0].dataIndex];
+                                return hand === 'R' ? 'Right-Handed Batters' : 'Left-Handed Batters';
+                            },
+                            label: function(context) {
+                                const value = context.parsed.y;
+                                if (value === null || value === undefined) return 'N/A';
+                                if (metric === 'xwoba') {
+                                    return value.toFixed(3);
+                                } else if (metric === 'usage_pct' || metric.includes('rate')) {
+                                    return value.toFixed(1) + '%';
+                                }
+                                return value.toFixed(1);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            color: 'var(--color-text-muted)',
+                            font: {
+                                size: 11,
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            color: 'var(--color-border)',
+                            display: false
+                        }
+                    },
+                    y: {
+                        min: globalMin,
+                        max: globalMax,
+                        ticks: {
+                            color: 'var(--color-text-muted)',
+                            font: {
+                                size: 10
+                            },
+                            callback: function(value) {
+                                if (metric === 'xwoba') {
+                                    return value.toFixed(2);
+                                }
+                                return value.toFixed(0) + (metric === 'usage_pct' || metric.includes('rate') ? '%' : '');
+                            }
+                        },
+                        grid: {
+                            color: 'var(--color-border)'
+                        }
+                    }
+                }
+            }
+        });
+        
+        charts.batterHandMultiples.push(chart);
+    });
+}
+
+function updateOverallMetricsTable(data) {
+    const tbody = document.querySelector('#overallMetricsTable tbody');
+    tbody.innerHTML = '';
+    
+    const pitchTypes = Object.keys(data).sort((a, b) => data[b].usage_pct - data[a].usage_pct);
+    
+    pitchTypes.forEach(pt => {
+        const row = tbody.insertRow();
+        const metrics = data[pt];
+        
+        row.insertCell(0).textContent = PITCH_LABELS[pt] || pt;
+        row.insertCell(1).textContent = metrics.usage_pct.toFixed(1) + '%';
+        row.insertCell(2).textContent = metrics.pitch_count.toLocaleString();
+        row.insertCell(3).textContent = metrics.strike_rate.toFixed(1) + '%';
+        row.insertCell(4).textContent = metrics.swing_rate.toFixed(1) + '%';
+        row.insertCell(5).textContent = metrics.whiff_rate !== null ? metrics.whiff_rate.toFixed(1) + '%' : 'N/A';
+        row.insertCell(6).textContent = metrics.zone_rate.toFixed(1) + '%';
+        row.insertCell(7).textContent = metrics.xwoba !== null ? metrics.xwoba.toFixed(3) : 'N/A';
+        row.insertCell(8).textContent = metrics.avg_velocity !== null ? metrics.avg_velocity.toFixed(1) + ' mph' : 'N/A';
+    });
+}
+
+
+
+
+function switchTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.tab === tabName) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // Update tab panes
+    document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+        if (pane.id === `tab-${tabName}`) {
+            pane.classList.add('active');
+        }
+    });
+    
+    // Resize charts
+    setTimeout(() => {
+        Object.values(charts).forEach(chart => {
+            if (chart) chart.resize();
+        });
+    }, 100);
+}
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-border);
+    color: var(--color-text-primary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.back-button:hover {
+    background: var(--color-accent);
+    transform: translateX(-2px);
+}
+
+.pitchmix-controls {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.control-group-full {
+    grid-column: 1 / -1;
+}
+
+.control-label {
+    color: var(--color-text-primary);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.control-input,
+.control-select {
+    padding: 0.75rem;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+}
+
+.control-input:focus,
+.control-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.player-search-container {
+    position: relative;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    margin-top: 0.25rem;
+}
+
+.player-dropdown-item {
+    padding: 0.75rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-border);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+}
+
+.selected-player-display span {
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+
+.clear-player-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s;
+}
+
+.clear-player-btn:hover {
+    background: var(--color-accent);
+}
+
+.generate-btn {
+    grid-column: 1 / -1;
+    padding: 1rem;
+    background: var(--color-accent);
+    color: var(--color-text-primary);
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+}
+
+.generate-btn:hover:not(.disabled) {
+    background: var(--color-accent-bright);
+    transform: translateY(-2px);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.loading-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    color: var(--color-text-primary);
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-bottom: 1rem;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: color-mix(in srgb, var(--color-danger) 30%, var(--color-surface));
+    border: 1px solid var(--color-danger);
+    border-radius: 6px;
+    color: #ff8888;
+    margin-bottom: 2rem;
+}
+
+.analysis-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.summary-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.summary-section h2 {
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--color-surface-muted);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border-strong);
+}
+
+.stat-label {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    color: var(--color-accent);
+    font-size: 1.5rem;
+    font-weight: 700;
+}
+
+.tab-navigation {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 2px solid var(--color-border);
+    margin-bottom: 1rem;
+}
+
+.tab-btn {
+    padding: 0.75rem 1.5rem;
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+}
+
+.tab-btn:hover {
+    color: var(--color-text-primary);
+}
+
+.tab-btn.active {
+    color: var(--color-accent);
+    border-bottom-color: var(--color-accent);
+}
+
+.tab-content {
+    position: relative;
+}
+
+.tab-pane {
+    display: none;
+}
+
+.tab-pane.active {
+    display: block;
+}
+
+.chart-container {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.chart-container h3 {
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+}
+
+.chart-container canvas {
+    max-height: 400px;
+}
+
+.metrics-table-container {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    overflow-x: auto;
+}
+
+.metrics-table-container h3 {
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+    font-size: 1.25rem;
+}
+
+.count-filter-select {
+    margin-bottom: 1rem;
+    padding: 0.5rem;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+}
+
+.effectiveness-viz-container {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.effectiveness-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.effectiveness-header h3 {
+    color: var(--color-text-primary);
+    margin: 0;
+    font-size: 1.25rem;
+}
+
+.metric-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.metric-selector label {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.metric-select {
+    padding: 0.5rem 1rem;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.metric-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.small-multiples-container {
+    margin-bottom: 1rem;
+}
+
+.small-multiples-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding: 1rem 0;
+}
+
+.small-multiple-card {
+    background: var(--color-surface-muted);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1rem;
+    transition: all 0.3s ease;
+}
+
+.small-multiple-card:hover {
+    border-color: var(--color-accent);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.2);
+    transform: translateY(-2px);
+}
+
+.small-multiple-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--color-border-strong);
+}
+
+.small-multiple-header h4 {
+    color: var(--color-text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.pitch-color-indicator {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid var(--color-border-subtle);
+}
+
+.small-multiple-chart {
+    height: 200px;
+    position: relative;
+}
+
+.metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--color-text-primary);
+}
+
+.metrics-table thead {
+    background: var(--color-surface-muted);
+}
+
+.metrics-table th {
+    padding: 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--color-border-strong);
+    color: var(--color-accent);
+}
+
+.metrics-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.metrics-table tbody tr:hover {
+    background: var(--color-surface-muted);
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .pitchmix-controls {
+        grid-template-columns: 1fr;
+    }
+    
+    .summary-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .tab-navigation {
+        flex-wrap: wrap;
+    }
+}
+</style>
+{% endblock %}
+

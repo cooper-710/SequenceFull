@@ -1,0 +1,1051 @@
+{% extends "base.html" %}
+
+{% block title %}Swing Decision Matrix - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Swing Decision Matrix</h1>
+                <p class="page-subtitle">Advanced swing/take decision visualization by pitch location with run value overlays, showing optimal decision zones, chase rate heatmaps, and swing decision quality metrics</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="pitchmix-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Batter Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="batterSearch" 
+                        class="control-input" 
+                        placeholder="Type to search batters..."
+                        autocomplete="off"
+                    >
+                    <div id="batterSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedBatterDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedBatterName"></span>
+                    <button id="clearBatter" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Count</label>
+                <select id="countSelect" class="control-select">
+                    <option value="">All Counts</option>
+                    <option value="0-0">0-0</option>
+                    <option value="1-0">1-0</option>
+                    <option value="0-1">0-1</option>
+                    <option value="2-0">2-0</option>
+                    <option value="1-1">1-1</option>
+                    <option value="0-2">0-2</option>
+                    <option value="3-0">3-0</option>
+                    <option value="2-1">2-1</option>
+                    <option value="1-2">1-2</option>
+                    <option value="3-1">3-1</option>
+                    <option value="2-2">2-2</option>
+                    <option value="3-2">3-2</option>
+                </select>
+            </div>
+
+            <button id="generateAnalysis" class="generate-btn" type="button">
+                <i class="fas fa-chart-line"></i> Generate Analysis
+            </button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading swing decision data...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error-message" style="display: none;">
+            <i class="fas fa-exclamation-circle"></i>
+            <span id="errorText"></span>
+        </div>
+
+        <!-- Main Analysis Content -->
+        <div id="analysisContent" class="analysis-content" style="display: none;">
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <h2 id="batterTitle"></h2>
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Pitches</div>
+                        <div class="stat-value" id="totalPitches">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Batter Hand</div>
+                        <div class="stat-value" id="batterHand">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Season</div>
+                        <div class="stat-value" id="seasonDisplay">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Decision Quality Score</div>
+                        <div class="stat-value" id="decisionQuality">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Visualization Mode Selector -->
+            <div class="visualization-controls">
+                <h3>Visualization Mode</h3>
+                <div class="mode-selector">
+                    <button class="mode-btn active" data-mode="run-value">Run Value Overlay</button>
+                    <button class="mode-btn" data-mode="chase-rate">Chase Rate Heatmap</button>
+                    <button class="mode-btn" data-mode="optimal-zones">Optimal Decision Zones</button>
+                    <button class="mode-btn" data-mode="decision-quality">Decision Quality</button>
+                </div>
+            </div>
+
+            <!-- Strike Zone Visualization -->
+            <div class="strike-zone-section">
+                <h3 id="visualizationTitle">Run Value Overlay</h3>
+                <div class="strike-zone-container">
+                    <canvas id="strikeZoneCanvas" width="800" height="600"></canvas>
+                    <div class="zone-legend">
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: linear-gradient(to right, #0066ff, #00ff00);"></span>
+                            <span>Positive Run Value (Swing)</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background: linear-gradient(to right, #ff0000, #ff6600);"></span>
+                            <span>Negative Run Value (Take)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metrics Grid -->
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <h4>Overall Swing Rate</h4>
+                    <div class="metric-value" id="overallSwingRate">-</div>
+                    <div class="metric-label">%</div>
+                </div>
+                <div class="metric-card">
+                    <h4>Zone Swing Rate</h4>
+                    <div class="metric-value" id="zoneSwingRate">-</div>
+                    <div class="metric-label">%</div>
+                </div>
+                <div class="metric-card">
+                    <h4>Chase Rate</h4>
+                    <div class="metric-value" id="chaseRate">-</div>
+                    <div class="metric-label">%</div>
+                </div>
+                <div class="metric-card">
+                    <h4>Take Rate (In Zone)</h4>
+                    <div class="metric-value" id="takeRateInZone">-</div>
+                    <div class="metric-label">%</div>
+                </div>
+                <div class="metric-card">
+                    <h4>Optimal Decision Rate</h4>
+                    <div class="metric-value" id="optimalDecisionRate">-</div>
+                    <div class="metric-label">%</div>
+                </div>
+                <div class="metric-card">
+                    <h4>Average Run Value</h4>
+                    <div class="metric-value" id="avgRunValue">-</div>
+                    <div class="metric-label">runs</div>
+                </div>
+            </div>
+
+            <!-- Decision Quality Breakdown -->
+            <div class="quality-breakdown-section">
+                <h3>Decision Quality Breakdown</h3>
+                <div class="quality-chart-container">
+                    <canvas id="qualityChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Run Value by Zone -->
+            <div class="zone-run-value-section">
+                <h3>Run Value by Zone</h3>
+                <div class="zone-run-value-grid" id="zoneRunValueGrid"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Player search functionality
+let selectedBatter = null;
+let currentData = null;
+let currentMode = 'run-value';
+let qualityChart = null;
+
+// Setup batter search functionality
+function setupBatterSearch() {
+    const batterSearchInput = document.getElementById('batterSearch');
+    const batterSearchDropdown = document.getElementById('batterSearchDropdown');
+    const selectedBatterDisplay = document.getElementById('selectedBatterDisplay');
+    const selectedBatterName = document.getElementById('selectedBatterName');
+    const clearBatterBtn = document.getElementById('clearBatter');
+    
+    let searchTimeout;
+
+    batterSearchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            batterSearchDropdown.style.display = 'none';
+            return;
+        }
+
+        searchTimeout = setTimeout(async () => {
+            try {
+                const response = await fetch(`/api/csv/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.players && data.players.length > 0) {
+                    batterSearchDropdown.innerHTML = '';
+                    data.players.slice(0, 10).forEach(player => {
+                        const item = document.createElement('div');
+                        item.className = 'dropdown-item';
+                        item.textContent = player.name || player;
+                        item.addEventListener('click', function() {
+                            selectBatter(player.name || player);
+                            batterSearchDropdown.style.display = 'none';
+                            batterSearchInput.value = '';
+                        });
+                        batterSearchDropdown.appendChild(item);
+                    });
+                    batterSearchDropdown.style.display = 'block';
+                } else {
+                    batterSearchDropdown.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error searching batters:', error);
+            }
+        }, 300);
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!batterSearchInput.contains(e.target) && !batterSearchDropdown.contains(e.target)) {
+            batterSearchDropdown.style.display = 'none';
+        }
+    });
+    
+    function selectBatter(name) {
+        selectedBatter = name;
+        batterSearchInput.value = '';
+        batterSearchInput.blur();
+        batterSearchDropdown.style.display = 'none';
+        batterSearchDropdown.innerHTML = '';
+        selectedBatterName.textContent = name;
+        selectedBatterDisplay.style.display = 'flex';
+    }
+
+    clearBatterBtn.addEventListener('click', function() {
+        selectedBatter = null;
+        selectedBatterDisplay.style.display = 'none';
+        document.getElementById('analysisContent').style.display = 'none';
+    });
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    setupBatterSearch();
+    
+    // Season dropdown
+    const seasonSelect = document.getElementById('seasonSelect');
+    const currentYear = new Date().getFullYear();
+    for (let year = currentYear; year >= 2008; year--) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        seasonSelect.appendChild(option);
+    }
+
+    // Generate analysis
+    document.getElementById('generateAnalysis').addEventListener('click', async function() {
+        if (!selectedBatter) {
+            alert('Please select a batter');
+            return;
+        }
+
+        const season = seasonSelect.value;
+        const count = document.getElementById('countSelect').value;
+        await loadSwingDecisionData(selectedBatter, season, count);
+    });
+
+    // Mode selector
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentMode = this.dataset.mode;
+            if (currentData) {
+                renderVisualization();
+            }
+        });
+    });
+
+    // Update visualization when count changes
+    document.getElementById('countSelect').addEventListener('change', function() {
+        if (currentData && selectedBatter) {
+            const season = document.getElementById('seasonSelect').value;
+            loadSwingDecisionData(selectedBatter, season, this.value);
+        }
+    });
+});
+
+// Load data from API
+async function loadSwingDecisionData(batterName, season, count) {
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    const analysisContent = document.getElementById('analysisContent');
+    const errorText = document.getElementById('errorText');
+
+    loadingIndicator.style.display = 'block';
+    errorMessage.style.display = 'none';
+    analysisContent.style.display = 'none';
+
+    try {
+        let url = `/api/visuals/swing-decision-matrix?batter=${encodeURIComponent(batterName)}`;
+        if (season) {
+            url += `&season=${season}`;
+        }
+        if (count) {
+            url += `&count=${count}`;
+        }
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.error) {
+            errorText.textContent = data.error;
+            errorMessage.style.display = 'block';
+            loadingIndicator.style.display = 'none';
+            return;
+        }
+
+        currentData = data;
+        displaySwingDecisionData(data);
+        loadingIndicator.style.display = 'none';
+        analysisContent.style.display = 'block';
+    } catch (error) {
+        errorText.textContent = `Error loading data: ${error.message}`;
+        errorMessage.style.display = 'block';
+        loadingIndicator.style.display = 'none';
+    }
+}
+
+// Display data
+function displaySwingDecisionData(data) {
+    // Update summary
+    document.getElementById('batterTitle').textContent = data.batter;
+    document.getElementById('totalPitches').textContent = data.total_pitches.toLocaleString();
+    document.getElementById('batterHand').textContent = data.batter_hand;
+    document.getElementById('seasonDisplay').textContent = data.season || 'All Seasons';
+    document.getElementById('decisionQuality').textContent = data.decision_quality_score?.toFixed(1) || '-';
+
+    // Update metrics
+    document.getElementById('overallSwingRate').textContent = data.overall_swing_rate?.toFixed(1) || '-';
+    document.getElementById('zoneSwingRate').textContent = data.zone_swing_rate?.toFixed(1) || '-';
+    document.getElementById('chaseRate').textContent = data.chase_rate?.toFixed(1) || '-';
+    document.getElementById('takeRateInZone').textContent = data.take_rate_in_zone?.toFixed(1) || '-';
+    document.getElementById('optimalDecisionRate').textContent = data.optimal_decision_rate?.toFixed(1) || '-';
+    document.getElementById('avgRunValue').textContent = data.avg_run_value?.toFixed(3) || '-';
+
+    // Render visualization
+    renderVisualization();
+
+    // Render quality breakdown
+    renderQualityBreakdown(data);
+
+    // Render zone run values
+    renderZoneRunValues(data);
+}
+
+// Render strike zone visualization
+function renderVisualization() {
+    if (!currentData) return;
+
+    const canvas = document.getElementById('strikeZoneCanvas');
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // Clear canvas
+    ctx.clearRect(0, 0, width, height);
+
+    // Strike zone dimensions (approximate)
+    const zoneWidth = 0.57 * 3; // 3 zones wide
+    const zoneHeight = 0.67 * 3; // 3 zones tall
+    const zoneLeft = -zoneWidth / 2;
+    const zoneTop = 1.5; // Bottom of strike zone
+    const zoneBottom = zoneTop + zoneHeight;
+
+    // Scale to canvas coordinates
+    const scaleX = width / 4; // Full width covers -2 to 2
+    const scaleY = height / 5; // Full height covers 0 to 5
+    const offsetX = width / 2;
+    const offsetY = height - (zoneTop * scaleY);
+
+    function toCanvasX(x) {
+        return offsetX + (x * scaleX);
+    }
+
+    function toCanvasY(z) {
+        return offsetY - (z * scaleY);
+    }
+
+    // Draw strike zone grid
+    const zoneW = 0.57;
+    const zoneH = 0.67;
+    const zoneStartX = -0.855;
+    const zoneStartY = 3.5;
+
+    // Draw 9-zone grid
+    for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+            const x = zoneStartX + col * zoneW;
+            const z = zoneStartY - (row + 1) * zoneH;
+            const canvasX = toCanvasX(x);
+            const canvasY = toCanvasY(z);
+            const canvasW = zoneW * scaleX;
+            const canvasH = zoneH * scaleY;
+
+            // Get zone number (1-9)
+            const zoneNum = row * 3 + col + 1;
+
+            // Get data for this zone
+            const zoneData = currentData.zone_data?.find(z => z.zone === zoneNum);
+            
+            if (zoneData) {
+                let color;
+                let alpha = 0.6;
+
+                if (currentMode === 'run-value') {
+                    const rv = zoneData.run_value || 0;
+                    // Normalize run value to color (blue = negative, green = positive)
+                    if (rv > 0) {
+                        const intensity = Math.min(1, rv / 0.1);
+                        color = `rgba(0, ${Math.floor(255 * intensity)}, 0, ${alpha})`;
+                    } else {
+                        const intensity = Math.min(1, Math.abs(rv) / 0.1);
+                        color = `rgba(255, ${Math.floor(100 * intensity)}, 0, ${alpha})`;
+                    }
+                } else if (currentMode === 'chase-rate') {
+                    const chaseRate = zoneData.chase_rate || 0;
+                    // Red = high chase rate, green = low
+                    const intensity = chaseRate / 50;
+                    color = `rgba(255, ${Math.floor(255 * (1 - intensity))}, 0, ${alpha})`;
+                } else if (currentMode === 'optimal-zones') {
+                    const optimal = zoneData.is_optimal_swing || false;
+                    color = optimal ? `rgba(0, 255, 0, ${alpha})` : `rgba(255, 0, 0, ${alpha})`;
+                } else if (currentMode === 'decision-quality') {
+                    const quality = zoneData.decision_quality || 0;
+                    // Green = good decisions, red = poor
+                    const intensity = quality / 100;
+                    color = `rgba(0, ${Math.floor(255 * intensity)}, ${Math.floor(255 * (1 - intensity))}, ${alpha})`;
+                }
+
+                ctx.fillStyle = color;
+                ctx.fillRect(canvasX, canvasY, canvasW, canvasH);
+            }
+
+            // Draw zone border
+            ctx.strokeStyle = 'var(--color-border)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(canvasX, canvasY, canvasW, canvasH);
+
+            // Draw zone number
+            ctx.fillStyle = 'var(--color-text-primary)';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(zoneNum, canvasX + canvasW / 2, canvasY + canvasH / 2);
+        }
+    }
+
+    // Draw plate
+    ctx.fillStyle = 'var(--color-text-primary)';
+    ctx.strokeStyle = 'var(--color-main-bg)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const platePoints = [
+        {x: -0.7085, z: 0.7085},
+        {x: 0.7085, z: 0.7085},
+        {x: 0.35425, z: 0.2085},
+        {x: 0, z: 0},
+        {x: -0.35425, z: 0.2085}
+    ];
+    ctx.moveTo(toCanvasX(platePoints[0].x), toCanvasY(platePoints[0].z));
+    for (let i = 1; i < platePoints.length; i++) {
+        ctx.lineTo(toCanvasX(platePoints[i].x), toCanvasY(platePoints[i].z));
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+}
+
+// Render quality breakdown chart
+function renderQualityBreakdown(data) {
+    const ctx = document.getElementById('qualityChart').getContext('2d');
+    
+    if (qualityChart) {
+        qualityChart.destroy();
+    }
+
+    const qualityData = data.quality_breakdown || {};
+    
+    qualityChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Optimal Decisions', 'Suboptimal Decisions', 'Poor Decisions'],
+            datasets: [{
+                data: [
+                    qualityData.optimal || 0,
+                    qualityData.suboptimal || 0,
+                    qualityData.poor || 0
+                ],
+                backgroundColor: [
+                    'rgba(0, 255, 0, 0.6)',
+                    'rgba(255, 206, 86, 0.6)',
+                    'rgba(255, 99, 132, 0.6)'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                }
+            }
+        }
+    });
+}
+
+// Render zone run values grid
+function renderZoneRunValues(data) {
+    const grid = document.getElementById('zoneRunValueGrid');
+    grid.innerHTML = '';
+
+    if (!data.zone_data) return;
+
+    // Create 3x3 grid
+    for (let row = 0; row < 3; row++) {
+        for (let col = 0; col < 3; col++) {
+            const zoneNum = row * 3 + col + 1;
+            const zoneData = data.zone_data.find(z => z.zone === zoneNum);
+
+            const cell = document.createElement('div');
+            cell.className = 'zone-cell';
+            cell.innerHTML = `
+                <div class="zone-number">Zone ${zoneNum}</div>
+                <div class="zone-run-value">${zoneData?.run_value?.toFixed(3) || 'N/A'}</div>
+                <div class="zone-swing-rate">Swing: ${zoneData?.swing_rate?.toFixed(1) || 'N/A'}%</div>
+                <div class="zone-optimal">${zoneData?.is_optimal_swing ? '✓ Optimal' : '✗ Not Optimal'}</div>
+            `;
+
+            if (zoneData?.run_value > 0) {
+                cell.classList.add('positive-rv');
+            } else if (zoneData?.run_value < 0) {
+                cell.classList.add('negative-rv');
+            }
+
+            grid.appendChild(cell);
+        }
+    }
+}
+
+// Update visualization title
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const titles = {
+                'run-value': 'Run Value Overlay',
+                'chase-rate': 'Chase Rate Heatmap',
+                'optimal-zones': 'Optimal Decision Zones',
+                'decision-quality': 'Decision Quality'
+            };
+            document.getElementById('visualizationTitle').textContent = titles[this.dataset.mode] || 'Visualization';
+        });
+    });
+});
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--color-border);
+    color: var(--color-text-primary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background 0.3s ease;
+}
+
+.back-button:hover {
+    background: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.pitchmix-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.control-group-full {
+    flex: 1;
+    min-width: 300px;
+}
+
+.control-label {
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.control-input,
+.control-select {
+    padding: 0.75rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+}
+
+.control-input:focus,
+.control-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.player-search-container {
+    position: relative;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    margin-top: 0.25rem;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.dropdown-item {
+    padding: 0.75rem;
+    cursor: pointer;
+    color: var(--color-text-primary);
+    transition: background 0.2s ease;
+}
+
+.dropdown-item:hover {
+    background: var(--color-border);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: var(--color-border);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+    color: var(--color-text-primary);
+}
+
+.clear-player-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    background: var(--color-accent);
+}
+
+.generate-btn {
+    padding: 0.75rem 1.5rem;
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 0.3s ease;
+}
+
+.generate-btn:hover:not(.disabled) {
+    background: var(--color-accent-bright);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.loading-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 3rem;
+    color: var(--color-text-primary);
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: color-mix(in srgb, var(--color-danger) 30%, var(--color-surface));
+    border: 2px solid var(--color-danger);
+    border-radius: 6px;
+    color: var(--color-danger);
+    margin-bottom: 2rem;
+}
+
+.analysis-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.summary-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.summary-section h2 {
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+    font-size: 1.75rem;
+}
+
+.summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--color-surface-alt);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+}
+
+.stat-label {
+    color: var(--color-text-subtle);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.visualization-controls {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.visualization-controls h3 {
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+}
+
+.mode-selector {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.mode-btn {
+    padding: 0.75rem 1.5rem;
+    background: var(--color-surface-muted);
+    color: var(--color-text-primary);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+}
+
+.mode-btn:hover {
+    background: var(--color-border);
+    border-color: var(--color-accent);
+}
+
+.mode-btn.active {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+    border-color: var(--color-accent);
+}
+
+.strike-zone-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.strike-zone-section h3 {
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+}
+
+.strike-zone-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.strike-zone-container canvas {
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+}
+
+.zone-legend {
+    display: flex;
+    gap: 2rem;
+    color: var(--color-text-primary);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.legend-color {
+    width: 30px;
+    height: 20px;
+    border-radius: 4px;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.metric-card {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.metric-card h4 {
+    color: var(--color-text-subtle);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.metric-value {
+    color: var(--color-accent);
+    font-size: 2rem;
+    font-weight: 700;
+}
+
+.metric-label {
+    color: var(--color-text-tertiary);
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+}
+
+.quality-breakdown-section,
+.zone-run-value-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.quality-breakdown-section h3,
+.zone-run-value-section h3 {
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+}
+
+.quality-chart-container {
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.zone-run-value-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+}
+
+.zone-cell {
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.zone-cell.positive-rv {
+    border-color: #00ff00;
+}
+
+.zone-cell.negative-rv {
+    border-color: #ff6600;
+}
+
+.zone-number {
+    color: var(--color-accent);
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-bottom: 0.5rem;
+}
+
+.zone-run-value {
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.zone-swing-rate {
+    color: var(--color-text-subtle);
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+
+.zone-optimal {
+    color: #00ff00;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .header-content {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .pitchmix-controls {
+        flex-direction: column;
+    }
+    
+    .control-group-full {
+        min-width: 100%;
+    }
+
+    .zone-run-value-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+

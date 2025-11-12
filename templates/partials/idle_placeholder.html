@@ -1,0 +1,30 @@
+{% macro idle_placeholder(placeholder_id='', placeholder_message='', placeholder_icon='', placeholder_hidden=False) -%}
+<div{% if placeholder_id %} id="{{ placeholder_id }}"{% endif %} class="heatmap-placeholder{% if placeholder_hidden %} hidden{% endif %}">
+    <div class="idle-scene">
+        <div class="idle-gradient"></div>
+        <div class="idle-grid"></div>
+        <div class="idle-grid idle-grid-alt"></div>
+
+        <div class="idle-logo">
+            <div class="idle-logo-ring ring-outer"></div>
+            <div class="idle-logo-ring ring-mid"></div>
+            <div class="idle-logo-ring ring-inner"></div>
+            <img src="{{ url_for('static', filename='sequence-logo.png') }}" alt="Sequence BioLab logo">
+        </div>
+
+        <div class="idle-spark idle-spark-1"></div>
+        <div class="idle-spark idle-spark-2"></div>
+        <div class="idle-spark idle-spark-3"></div>
+    </div>
+    {% if placeholder_message or placeholder_icon %}
+    <div class="placeholder-text">
+        {% if placeholder_icon %}
+        <i class="{{ placeholder_icon }}"></i>
+        {% endif %}
+        {% if placeholder_message %}
+        <p>{{ placeholder_message }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{%- endmacro %}

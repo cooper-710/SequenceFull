@@ -1,0 +1,12 @@
+cd ~/Desktop/reports2
+./report "Pete Alonso" "Harrison Bader" "Nolan Arenado" "Tommy Pham" "Christian Walker"
+
+
+cd ~/Desktop/reports2
+./run_all.sh
+
+
+
+cd ~/Desktop/reports2
+source venv/bin/activate
+python3 src/generate_report.py --out build/pdf --team PHI --hitter "Harrison Bader" --season_start 2025-03-20 --use-next-series

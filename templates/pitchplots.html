@@ -1,0 +1,1870 @@
+{% extends "base.html" %}
+{% from 'partials/idle_placeholder.html' import idle_placeholder %}
+{% block title %}Pitch Plots - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Pitch Plots</h1>
+                <p class="page-subtitle">Interactive Trackman movement plots for pitchers with advanced filtering</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="pitchplots-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Pitcher Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="pitcherSearch" 
+                        class="control-input" 
+                        placeholder="Type to search pitchers..."
+                        autocomplete="off"
+                    >
+                    <div id="pitcherSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedPitcherDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedPitcherName"></span>
+                    <button id="clearPitcher" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Pitch Type</label>
+                <select id="pitchTypeSelect" class="control-select">
+                    <option value="">All Types</option>
+                    <option value="FF">Four-Seam Fastball</option>
+                    <option value="FT">Two-Seam Fastball</option>
+                    <option value="SI">Sinker</option>
+                    <option value="FC">Cutter</option>
+                    <option value="SL">Slider</option>
+                    <option value="ST">Sweeper</option>
+                    <option value="CU">Curveball</option>
+                    <option value="KC">Knuckle Curve</option>
+                    <option value="CH">Changeup</option>
+                    <option value="FS">Split-Finger</option>
+                    <option value="KN">Knuckleball</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Batter Handedness</label>
+                <select id="batterHandSelect" class="control-select">
+                    <option value="">All</option>
+                    <option value="R">Right</option>
+                    <option value="L">Left</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Count</label>
+                <select id="countSelect" class="control-select">
+                    <option value="">All Counts</option>
+                    <option value="0-0">0-0</option>
+                    <option value="1-0">1-0</option>
+                    <option value="0-1">0-1</option>
+                    <option value="1-1">1-1</option>
+                    <option value="2-0">2-0</option>
+                    <option value="2-1">2-1</option>
+                    <option value="1-2">1-2</option>
+                    <option value="2-2">2-2</option>
+                    <option value="3-0">3-0</option>
+                    <option value="3-1">3-1</option>
+                    <option value="3-2">3-2</option>
+                    <option value="0-2">0-2</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Min Velocity (mph)</label>
+                <input type="number" id="minVelocity" class="control-input" placeholder="e.g. 85" step="1" min="0" max="110">
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Max Velocity (mph)</label>
+                <input type="number" id="maxVelocity" class="control-input" placeholder="e.g. 100" step="1" min="0" max="110">
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Min Horizontal Break (in)</label>
+                <input type="number" id="minHB" class="control-input" placeholder="e.g. -20" step="1" min="-30" max="30">
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Max Horizontal Break (in)</label>
+                <input type="number" id="maxHB" class="control-input" placeholder="e.g. 20" step="1" min="-30" max="30">
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Min Vertical Break (in)</label>
+                <input type="number" id="minVB" class="control-input" placeholder="e.g. -20" step="1" min="-30" max="30">
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Max Vertical Break (in)</label>
+                <input type="number" id="maxVB" class="control-input" placeholder="e.g. 20" step="1" min="-30" max="30">
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">View Mode</label>
+                <select id="viewModeSelect" class="control-select">
+                    <option value="scatter">Scatter Plot</option>
+                    <option value="density">Density Heatmap</option>
+                    <option value="both">Both</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Normalize by Arm Side</label>
+                <input type="checkbox" id="normalizeArmSide" class="control-checkbox">
+            </div>
+
+            <button id="generatePitchPlots" class="generate-btn" type="button">
+                <i class="fas fa-chart-line"></i> Generate Pitch Plots
+            </button>
+        </div>
+
+        <!-- Pitch Plots Visualization -->
+        <div class="pitchplots-container">
+            <div class="pitchplots-wrapper">
+                <div class="plot-controls">
+                    <button id="resetPlot" class="plot-control-btn" style="display: none;">
+                        <i class="fas fa-undo"></i> Reset View
+                    </button>
+                    <button id="toggleSelection" class="plot-control-btn" style="display: none;">
+                        <i class="fas fa-mouse-pointer"></i> <span id="selectionModeText">Enable Selection</span>
+                    </button>
+                </div>
+                <div class="pitchplots-chart heatmap-wrapper">
+                    <div id="pitchPlotsChart" class="pitchplots-chart-inner"></div>
+                    {{ idle_placeholder('pitchPlotsPlaceholder') }}
+                </div>
+                <div id="pitchPlotsInfo" class="pitchplots-info">
+                    <p>Select a pitcher and click "Generate Pitch Plots" to visualize pitch movement data.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.plot.ly/plotly-2.26.0.min.js"></script>
+<script>
+// Pitch type colors (Trackman-style)
+const PITCH_COLORS = {
+    "FF": "#FF0000", "FT": "#8B0000", "SI": "#FFA500", "FC": "#808080",
+    "SL": "var(--color-main-bg)0FF", "CU": "#800080", "CH": "#008000", "FS": "#00FFFF",
+    "KC": "#4B0082", "KN": "#D3D3D3", "ST": "#008080", "SV": "#4682B4"
+};
+
+let selectedPitcher = null;
+let pitchData = null;
+let currentPlot = null;
+let allPitchData = null; // Store all pitches for filtering
+let selectionEnabled = false; // Track selection mode state
+
+function setPitchPlotsPlaceholderVisible(visible) {
+    const placeholder = document.getElementById('pitchPlotsPlaceholder');
+    if (!placeholder) return;
+    if (visible) {
+        placeholder.classList.remove('hidden');
+    } else {
+        placeholder.classList.add('hidden');
+    }
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadFilterOptions();
+    setupPitcherSearch();
+    
+    // Start watching for selection boxes
+    setTimeout(() => {
+        startSelectionBoxObserver();
+    }, 1000);
+    
+    const generateBtn = document.getElementById('generatePitchPlots');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+        generateBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!selectedPitcher) {
+                alert('Please select a pitcher first');
+                return;
+            }
+            generatePitchPlots();
+        });
+    }
+
+    document.getElementById('clearPitcher').addEventListener('click', function() {
+        clearPitcherSelection();
+    });
+    
+    // Setup reset button - it will regenerate the plot from scratch
+    const resetBtn = document.getElementById('resetPlot');
+    if (resetBtn) {
+        // Remove any existing listeners by cloning the element
+        const newResetBtn = resetBtn.cloneNode(true);
+        resetBtn.parentNode.replaceChild(newResetBtn, resetBtn);
+        
+        newResetBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!selectedPitcher) {
+                alert('Please select a pitcher first');
+                return;
+            }
+            generatePitchPlots();
+        });
+    }
+    
+    // Setup toggle selection button using event delegation to handle recreations
+    // Use document-level delegation to catch clicks even if button is recreated
+    document.addEventListener('click', function(e) {
+        // Check if click is on the button or any of its children
+        const toggleBtn = e.target.closest('#toggleSelection');
+        const toggleBtnById = document.getElementById('toggleSelection');
+        const isToggleBtn = toggleBtn || (toggleBtnById && (toggleBtnById.contains(e.target) || e.target === toggleBtnById));
+        
+        if (isToggleBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            // Small delay to ensure Plotly doesn't interfere
+            setTimeout(() => {
+                // Ensure button is clickable
+                if (currentPlot) {
+                    toggleSelectionMode();
+                } else {
+                    console.warn('Cannot toggle selection: no plot available');
+                }
+            }, 0);
+        }
+    }, true); // Use capture phase to ensure we get the event first
+});
+
+async function loadFilterOptions() {
+    try {
+        const response = await fetch('/api/analytics/players');
+        const data = await response.json();
+        if (data.players) {
+            console.log(`Loaded ${data.players.length} players for search`);
+        }
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
+}
+
+async function loadPitcherSeasons(pitcherName) {
+    try {
+        const encodedName = encodeURIComponent(pitcherName);
+        const response = await fetch(`/api/pitcher/${encodedName}/seasons`);
+        
+        if (!response.ok) {
+            const seasonSelect = document.getElementById('seasonSelect');
+            if (seasonSelect) {
+                seasonSelect.innerHTML = '<option value="">Error loading seasons</option>';
+            }
+            return;
+        }
+        
+        const data = await response.json();
+        const seasons = data.seasons || [];
+        
+        const seasonSelect = document.getElementById('seasonSelect');
+        if (!seasonSelect) return;
+        
+        seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+        
+        if (seasons.length === 0) {
+            seasonSelect.innerHTML = '<option value="">No seasons available</option>';
+        } else {
+            const sortedSeasons = [...seasons].sort((a, b) => {
+                const aInt = parseInt(a) || 0;
+                const bInt = parseInt(b) || 0;
+                return bInt - aInt;
+            });
+            
+            sortedSeasons.forEach(season => {
+                const option = document.createElement('option');
+                option.value = season;
+                option.textContent = season;
+                seasonSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading pitcher seasons:', error);
+        // Fallback: try CSV seasons endpoint
+        try {
+            const encodedName = encodeURIComponent(pitcherName);
+            const response = await fetch(`/api/csv/player/${encodedName}/seasons`);
+            if (response.ok) {
+                const data = await response.json();
+                const seasons = data.seasons || [];
+                const seasonSelect = document.getElementById('seasonSelect');
+                if (seasonSelect && seasons.length > 0) {
+                    seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+                    [...seasons].sort((a, b) => parseInt(b) - parseInt(a)).forEach(season => {
+                        const option = document.createElement('option');
+                        option.value = season;
+                        option.textContent = season;
+                        seasonSelect.appendChild(option);
+                    });
+                }
+            }
+        } catch (e) {
+            console.error('Fallback season load failed:', e);
+        }
+    }
+}
+
+let searchTimeout = null;
+
+function setupPitcherSearch() {
+    const input = document.getElementById('pitcherSearch');
+    const dropdown = document.getElementById('pitcherSearchDropdown');
+    
+    if (!input || !dropdown) return;
+    
+    input.disabled = false;
+    input.readOnly = false;
+    input.style.pointerEvents = 'auto';
+    
+    async function searchPitchers() {
+        const searchTerm = input.value.trim();
+        
+        if (!searchTerm || searchTerm.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/csv/search?q=${encodeURIComponent(searchTerm)}`);
+            const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+            
+            const players = data.players || [];
+            
+            if (players.length === 0) {
+                dropdown.innerHTML = '<div class="player-dropdown-item" style="color: var(--color-text-muted);">No pitchers found</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            dropdown.innerHTML = players.slice(0, 10).map(player => 
+                `<div class="player-dropdown-item" data-player="${player.name.replace(/"/g, '&quot;')}">${player.name}</div>`
+            ).join('');
+            dropdown.style.display = 'block';
+            
+            dropdown.querySelectorAll('.player-dropdown-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const playerName = this.getAttribute('data-player');
+                    if (playerName && !playerName.includes('No pitchers found')) {
+                        selectPitcher(playerName);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Search error:', error);
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    input.addEventListener('input', function(e) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(searchPitchers, 300);
+    });
+    
+    input.addEventListener('focus', function() {
+        if (this.value.trim().length >= 2) {
+            searchPitchers();
+        }
+    });
+    
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(searchTimeout);
+            const firstMatch = dropdown.querySelector('.player-dropdown-item[data-player]');
+            if (firstMatch && !firstMatch.textContent.includes('No pitchers found')) {
+                firstMatch.click();
+            } else if (this.value.trim().length >= 2) {
+                selectPitcher(this.value.trim());
+            }
+        }
+    });
+    
+    document.addEventListener('click', function(e) {
+        if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+function selectPitcher(pitcherName) {
+    selectedPitcher = pitcherName;
+    const searchInput = document.getElementById('pitcherSearch');
+    if (searchInput) {
+        searchInput.value = pitcherName;
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('pitcherSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    
+    const display = document.getElementById('selectedPitcherDisplay');
+    const nameSpan = document.getElementById('selectedPitcherName');
+    if (display && nameSpan) {
+        nameSpan.textContent = pitcherName;
+        display.style.display = 'flex';
+    }
+    
+    const generateBtn = document.getElementById('generatePitchPlots');
+    if (generateBtn) {
+        generateBtn.classList.remove('disabled');
+    }
+    
+    loadPitcherSeasons(pitcherName);
+}
+
+function clearPitcherSelection() {
+    selectedPitcher = null;
+    document.getElementById('pitcherSearch').value = '';
+    document.getElementById('selectedPitcherDisplay').style.display = 'none';
+    document.getElementById('seasonSelect').innerHTML = '<option value="">All Seasons</option>';
+    
+    const generateBtn = document.getElementById('generatePitchPlots');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+    }
+    
+    pitchData = null;
+    if (currentPlot) {
+        document.getElementById('pitchPlotsChart').innerHTML = '';
+        currentPlot = null;
+    }
+    
+    document.getElementById('pitchPlotsInfo').innerHTML = '<p>Select a pitcher and click "Generate Pitch Plots" to visualize pitch movement data.</p>';
+    setPitchPlotsPlaceholderVisible(true);
+}
+
+async function generatePitchPlots() {
+    if (!selectedPitcher) {
+        alert('Please select a pitcher first');
+        return;
+    }
+    
+    const generateBtn = document.getElementById('generatePitchPlots');
+    if (generateBtn) {
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+    }
+    
+    const infoDiv = document.getElementById('pitchPlotsInfo');
+    infoDiv.innerHTML = '<p><i class="fas fa-spinner fa-spin"></i> Loading pitch data...</p>';
+    
+    try {
+        // Collect filter parameters
+        const params = new URLSearchParams({
+            pitcher: selectedPitcher,
+            season: document.getElementById('seasonSelect').value || '',
+            pitch_type: document.getElementById('pitchTypeSelect').value || '',
+            batter_hand: document.getElementById('batterHandSelect').value || '',
+            count: document.getElementById('countSelect').value || '',
+            min_velocity: document.getElementById('minVelocity').value || '',
+            max_velocity: document.getElementById('maxVelocity').value || '',
+            min_hb: document.getElementById('minHB').value || '',
+            max_hb: document.getElementById('maxHB').value || '',
+            min_vb: document.getElementById('minVB').value || '',
+            max_vb: document.getElementById('maxVB').value || '',
+            normalize_arm_side: document.getElementById('normalizeArmSide').checked ? '1' : '0',
+            view_mode: document.getElementById('viewModeSelect').value || 'scatter'
+        });
+        
+        const response = await fetch(`/api/visuals/pitchplots?${params.toString()}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        pitchData = data;
+        allPitchData = data; // Store full dataset
+        renderPitchPlots(data);
+        
+    } catch (error) {
+        console.error('Error generating pitch plots:', error);
+        infoDiv.innerHTML = `<p style="color: var(--color-danger);">Error: ${error.message}</p>`;
+        setPitchPlotsPlaceholderVisible(true);
+    } finally {
+        if (generateBtn) {
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<i class="fas fa-chart-line"></i> Generate Pitch Plots';
+        }
+    }
+}
+
+function renderPitchPlots(data) {
+    const chartDiv = document.getElementById('pitchPlotsChart');
+    const infoDiv = document.getElementById('pitchPlotsInfo');
+    
+    if (!data.pitches || data.pitches.length === 0) {
+        chartDiv.innerHTML = '';
+        infoDiv.innerHTML = '<p style="color: var(--color-text-subtle);">No pitch data available for the selected filters.</p>';
+        setPitchPlotsPlaceholderVisible(true);
+        return;
+    }
+    
+    // Group pitches by type
+    const pitchesByType = {};
+    data.pitches.forEach(pitch => {
+        const type = pitch.pitch_type || 'UN';
+        if (!pitchesByType[type]) {
+            pitchesByType[type] = [];
+        }
+        pitchesByType[type].push(pitch);
+    });
+    
+    // Create traces for each pitch type
+    const traces = [];
+    const viewMode = document.getElementById('viewModeSelect').value;
+    const showDensity = viewMode === 'density' || viewMode === 'both';
+    const showScatter = viewMode === 'scatter' || viewMode === 'both';
+    
+    // Sort pitch types by usage (most common first)
+    const pitchTypes = Object.keys(pitchesByType).sort((a, b) => 
+        pitchesByType[b].length - pitchesByType[a].length
+    );
+    
+    // Add density contour if requested
+    if (showDensity && data.pitches.length >= 10) {
+        const allX = data.pitches.map(p => p.horizontal_break);
+        const allY = data.pitches.map(p => p.vertical_break);
+        
+        traces.push({
+            x: allX,
+            y: allY,
+            type: 'histogram2dcontour',
+            colorscale: 'Greys',
+            showscale: false,
+            opacity: 0.3,
+            hoverinfo: 'skip',
+            name: 'Density'
+        });
+    }
+    
+    // Add scatter traces for each pitch type
+    if (showScatter) {
+        pitchTypes.forEach(pitchType => {
+            const pitches = pitchesByType[pitchType];
+            const color = PITCH_COLORS[pitchType] || '#999999';
+            
+            traces.push({
+                x: pitches.map(p => p.horizontal_break),
+                y: pitches.map(p => p.vertical_break),
+                mode: 'markers',
+                type: 'scatter',
+                name: pitchType,
+                marker: {
+                    color: color,
+                    size: 8,
+                    line: {
+                        color: 'black',
+                        width: 0.5
+                    },
+                    opacity: 0.7
+                },
+                text: pitches.map(p => 
+                    `Pitch: ${pitchType}<br>` +
+                    `Vel: ${p.velocity ? p.velocity.toFixed(1) : 'N/A'} mph<br>` +
+                    `HB: ${p.horizontal_break.toFixed(1)} in<br>` +
+                    `VB: ${p.vertical_break.toFixed(1)} in<br>` +
+                    `Count: ${p.count || 'N/A'}`
+                ),
+                hoverinfo: 'text'
+            });
+        });
+    }
+    
+    const layout = {
+        title: {
+            text: `Pitch Movement Profile — ${data.pitcher}`,
+            font: { size: 18, color: 'var(--color-text-primary)' }
+        },
+        xaxis: {
+            title: 'Horizontal Break (inches)',
+            zeroline: true,
+            zerolinecolor: 'var(--color-text-tertiary)',
+            zerolinewidth: 1,
+            gridcolor: 'var(--color-border)',
+            color: 'var(--color-text-muted)',
+            range: [-40, 40]
+        },
+        yaxis: {
+            title: 'Vertical Break (inches)',
+            zeroline: true,
+            zerolinecolor: 'var(--color-text-tertiary)',
+            zerolinewidth: 1,
+            gridcolor: 'var(--color-border)',
+            color: 'var(--color-text-muted)',
+            range: [-20, 20],
+            scaleanchor: 'x',
+            scaleratio: 1
+        },
+        plot_bgcolor: 'var(--color-surface)',
+        paper_bgcolor: 'var(--color-surface)',
+        font: { color: 'var(--color-text-muted)' },
+        legend: {
+            bgcolor: 'var(--color-surface-muted)',
+            bordercolor: 'var(--color-border-strong)',
+            borderwidth: 1,
+            font: { color: 'var(--color-text-muted)' }
+        },
+        hovermode: 'closest',
+        showlegend: pitchTypes.length > 1
+    };
+    
+    const config = {
+        responsive: true,
+        displayModeBar: true,
+        modeBarButtonsToRemove: ['pan2d', 'lasso2d', 'select2d'],
+        displaylogo: false
+    };
+    
+    Plotly.newPlot(chartDiv, traces, layout, config);
+    currentPlot = chartDiv;
+    setPitchPlotsPlaceholderVisible(false);
+    
+    // Show plot controls
+    document.getElementById('resetPlot').style.display = 'inline-flex';
+    document.getElementById('toggleSelection').style.display = 'inline-flex';
+    
+    // Listen for Plotly relayout events to remove blur when dragmode changes
+    chartDiv.on('plotly_relayout', function(eventData) {
+        // If dragmode changed to zoom, remove blur
+        if (eventData && 'dragmode' in eventData && eventData.dragmode === 'zoom') {
+            setTimeout(() => removeBlurEffects(), 50);
+        }
+    });
+    
+    // Reset button and toggle selection button are already set up in DOMContentLoaded
+    
+    // Add selection event listener
+    chartDiv.on('plotly_selected', function(eventData) {
+        if (!selectionEnabled) return;
+        
+        if (eventData && eventData.points && eventData.points.length > 0) {
+            // Get selection box coordinates
+            const selection = eventData.range;
+            if (selection && selection.x && selection.y) {
+                const xMin = Math.min(selection.x[0], selection.x[1]);
+                const xMax = Math.max(selection.x[0], selection.x[1]);
+                const yMin = Math.min(selection.y[0], selection.y[1]);
+                const yMax = Math.max(selection.y[0], selection.y[1]);
+                
+                // Filter pitches within selection box
+                const filteredPitches = data.pitches.filter(pitch => {
+                    return pitch.horizontal_break >= xMin &&
+                           pitch.horizontal_break <= xMax &&
+                           pitch.vertical_break >= yMin &&
+                           pitch.vertical_break <= yMax;
+                });
+                
+                // Update table with filtered data
+                updatePitchTypeTable(filteredPitches, data.pitcher);
+            }
+        }
+    });
+    
+    // Add click event to clear selection (double-click) - regenerate plot
+    chartDiv.on('plotly_doubleclick', function(eventData) {
+        // Regenerate plot to reset everything
+        if (selectedPitcher) {
+            generatePitchPlots();
+        }
+    });
+    
+    // Disable selection mode initially
+    updateSelectionMode();
+    
+    // Initial table render
+    updatePitchTypeTable(data.pitches, data.pitcher);
+    
+    // Ensure no blur is applied initially
+    removeBlurEffects();
+}
+
+function updatePitchTypeTable(pitches, pitcherName) {
+    const infoDiv = document.getElementById('pitchPlotsInfo');
+    
+    if (!pitches || pitches.length === 0) {
+        infoDiv.innerHTML = '<p style="color: var(--color-text-subtle);">No pitches selected. Select a box on the plot to filter pitches.</p>';
+        return;
+    }
+    
+    // Calculate pitch type statistics from filtered pitches
+    const pitchTypeStats = calculatePitchTypeStats(pitches);
+    
+    // Build pitch type table
+    let tableHTML = '';
+    if (pitchTypeStats.length > 0) {
+        tableHTML = `
+            <div class="pitch-type-table-container">
+                <h3>Pitch Type Breakdown</h3>
+                <div class="table-wrapper">
+                    <table class="pitch-type-table">
+                        <thead>
+                            <tr>
+                                <th>Pitch</th>
+                                <th>Count</th>
+                                <th>Usage %</th>
+                                <th>Velocity (mph)</th>
+                                <th>HB (in)</th>
+                                <th>VB (in)</th>
+                                <th>Release H (ft)</th>
+                                <th>Release S (ft)</th>
+                                <th>Extension (ft)</th>
+                                <th>Spin Rate (rpm)</th>
+                                <th>Spin Axis (°)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+        `;
+        
+        pitchTypeStats.forEach(stat => {
+            const pitchColor = PITCH_COLORS[stat.pitch_type] || '#999999';
+            let velocityDisplay = 'N/A';
+            if (stat.velocity_avg) {
+                velocityDisplay = stat.velocity_avg.toFixed(1);
+                if (stat.velocity_min && stat.velocity_max && 
+                    Math.abs(stat.velocity_max - stat.velocity_min) > 0.5) {
+                    velocityDisplay += `<br><small style="color: var(--color-text-subtle);">(${stat.velocity_min.toFixed(0)}-${stat.velocity_max.toFixed(0)})</small>`;
+                }
+            }
+            
+            tableHTML += `
+                <tr>
+                    <td class="pitch-type-cell" style="border-left: 4px solid ${pitchColor}">
+                        <strong>${stat.pitch_type}</strong>
+                    </td>
+                    <td>${stat.count}</td>
+                    <td>${stat.usage_pct ? stat.usage_pct.toFixed(1) : '0.0'}%</td>
+                    <td>${velocityDisplay}</td>
+                    <td>${stat.horizontal_break_avg !== undefined ? stat.horizontal_break_avg.toFixed(1) : 'N/A'}</td>
+                    <td>${stat.vertical_break_avg !== undefined ? stat.vertical_break_avg.toFixed(1) : 'N/A'}</td>
+                    <td>${stat.release_height !== undefined ? stat.release_height.toFixed(2) : 'N/A'}</td>
+                    <td>${stat.release_side !== undefined ? stat.release_side.toFixed(2) : 'N/A'}</td>
+                    <td>${stat.release_extension !== undefined ? stat.release_extension.toFixed(2) : 'N/A'}</td>
+                    <td>${stat.spin_rate_avg !== undefined ? Math.round(stat.spin_rate_avg) : 'N/A'}</td>
+                    <td>${stat.spin_axis_avg !== undefined ? Math.round(stat.spin_axis_avg) : 'N/A'}</td>
+                </tr>
+            `;
+        });
+        
+        tableHTML += `
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    }
+    
+    infoDiv.innerHTML = `
+        <div class="pitchplots-summary">
+            ${pitches.length < allPitchData.pitches.length ? 
+                `<div class="selection-info">
+                    <span style="color: var(--color-accent);">Showing ${pitches.length} of ${allPitchData.pitches.length} pitches</span>
+                    <button id="clearSelectionBtn" class="clear-selection-btn">Clear Selection</button>
+                </div>` : ''
+            }
+            ${tableHTML}
+        </div>
+    `;
+    
+    // Setup clear selection button if it exists
+    const clearBtn = document.getElementById('clearSelectionBtn');
+    if (clearBtn) {
+        // Remove any existing listeners by cloning
+        const newBtn = clearBtn.cloneNode(true);
+        clearBtn.parentNode.replaceChild(newBtn, clearBtn);
+        // Add new listener
+        newBtn.addEventListener('click', function() {
+            window.clearSelection();
+        });
+    }
+}
+
+function calculatePitchTypeStats(pitches) {
+    // Group pitches by type
+    const pitchesByType = {};
+    pitches.forEach(pitch => {
+        const type = pitch.pitch_type || 'UN';
+        if (!pitchesByType[type]) {
+            pitchesByType[type] = [];
+        }
+        pitchesByType[type].push(pitch);
+    });
+    
+    const totalPitches = pitches.length;
+    const stats = [];
+    
+    // Calculate stats for each pitch type
+    Object.keys(pitchesByType).forEach(pitchType => {
+        const typePitches = pitchesByType[pitchType];
+        const count = typePitches.length;
+        
+        const stat = {
+            pitch_type: pitchType,
+            count: count,
+            usage_pct: (count / totalPitches * 100) || 0
+        };
+        
+        // Calculate velocity stats
+        const velocities = typePitches.map(p => p.velocity).filter(v => v !== null && v !== undefined);
+        if (velocities.length > 0) {
+            stat.velocity_avg = velocities.reduce((a, b) => a + b, 0) / velocities.length;
+            stat.velocity_min = Math.min(...velocities);
+            stat.velocity_max = Math.max(...velocities);
+        }
+        
+        // Calculate movement stats
+        const hbValues = typePitches.map(p => p.horizontal_break).filter(v => v !== null && v !== undefined);
+        if (hbValues.length > 0) {
+            stat.horizontal_break_avg = hbValues.reduce((a, b) => a + b, 0) / hbValues.length;
+        }
+        
+        const vbValues = typePitches.map(p => p.vertical_break).filter(v => v !== null && v !== undefined);
+        if (vbValues.length > 0) {
+            stat.vertical_break_avg = vbValues.reduce((a, b) => a + b, 0) / vbValues.length;
+        }
+        
+        // Calculate release position stats
+        const releaseHeights = typePitches.map(p => p.release_height).filter(v => v !== null && v !== undefined);
+        if (releaseHeights.length > 0) {
+            stat.release_height = releaseHeights.reduce((a, b) => a + b, 0) / releaseHeights.length;
+        }
+        
+        const releaseSides = typePitches.map(p => p.release_side).filter(v => v !== null && v !== undefined);
+        if (releaseSides.length > 0) {
+            stat.release_side = releaseSides.reduce((a, b) => a + b, 0) / releaseSides.length;
+        }
+        
+        // Calculate release extension
+        const extensions = typePitches.map(p => p.release_extension).filter(v => v !== null && v !== undefined);
+        if (extensions.length > 0) {
+            stat.release_extension = extensions.reduce((a, b) => a + b, 0) / extensions.length;
+        }
+        
+        // Calculate spin rate
+        const spinRates = typePitches.map(p => p.spin_rate).filter(v => v !== null && v !== undefined);
+        if (spinRates.length > 0) {
+            stat.spin_rate_avg = spinRates.reduce((a, b) => a + b, 0) / spinRates.length;
+        }
+        
+        // Calculate spin axis (circular mean)
+        const spinAxes = typePitches.map(p => p.spin_axis).filter(v => v !== null && v !== undefined);
+        if (spinAxes.length > 0) {
+            // Convert to radians for circular mean
+            const axesRad = spinAxes.map(deg => deg * Math.PI / 180);
+            const meanCos = axesRad.map(rad => Math.cos(rad)).reduce((a, b) => a + b, 0) / spinAxes.length;
+            const meanSin = axesRad.map(rad => Math.sin(rad)).reduce((a, b) => a + b, 0) / spinAxes.length;
+            let meanAxis = Math.atan2(meanSin, meanCos) * 180 / Math.PI;
+            if (meanAxis < 0) meanAxis += 360;
+            stat.spin_axis_avg = meanAxis;
+        }
+        
+        stats.push(stat);
+    });
+    
+    // Sort by usage percentage
+    stats.sort((a, b) => b.usage_pct - a.usage_pct);
+    
+    return stats;
+}
+
+// Helper function to remove blur effects
+function removeBlurEffects() {
+    // Remove blur from body
+    document.body.style.filter = '';
+    document.body.style.backdropFilter = '';
+    document.body.style.webkitBackdropFilter = '';
+    document.body.classList.remove('plotly-graph-div-selected', 'selection-active');
+    
+    // Remove blur from common container elements (more efficient than all elements)
+    const containers = document.querySelectorAll('.app-container, .sidebar, .content-wrapper, .page-wrapper, main, #app');
+    containers.forEach(el => {
+        el.style.filter = '';
+        el.style.backdropFilter = '';
+        el.style.webkitBackdropFilter = '';
+        el.classList.remove('plotly-graph-div-selected', 'selection-active');
+    });
+    
+    // Remove blur from page container
+    const pageContainer = document.querySelector('.page-container');
+    if (pageContainer) {
+        pageContainer.style.filter = '';
+        pageContainer.style.backdropFilter = '';
+        pageContainer.style.webkitBackdropFilter = '';
+        pageContainer.classList.remove('plotly-graph-div-selected', 'selection-active');
+    }
+    
+    // Remove blur from plot container
+    const plotContainer = document.querySelector('.pitchplots-container');
+    if (plotContainer) {
+        plotContainer.style.filter = '';
+        plotContainer.style.backdropFilter = '';
+        plotContainer.style.webkitBackdropFilter = '';
+        plotContainer.classList.remove('plotly-graph-div-selected', 'selection-active');
+    }
+    
+    // Remove blur from plot div
+    const plotDiv = document.getElementById('pitchPlotsChart');
+    if (plotDiv) {
+        plotDiv.style.filter = '';
+        plotDiv.style.backdropFilter = '';
+        plotDiv.style.webkitBackdropFilter = '';
+        // Remove any Plotly classes that might cause blur
+        plotDiv.classList.remove('plotly-graph-div-selected', 'js-plotly-plot-selected', 'plotly-selected');
+    }
+    
+    // Remove blur from all Plotly elements
+    const plotlyElements = document.querySelectorAll('.js-plotly-plot, .plotly, .modebar, .plotly-graph-div');
+    plotlyElements.forEach(el => {
+        el.style.filter = '';
+        el.style.backdropFilter = '';
+        el.style.webkitBackdropFilter = '';
+        el.classList.remove('plotly-graph-div-selected', 'js-plotly-plot-selected', 'plotly-selected');
+    });
+    
+    // Remove any overlay elements that might be causing blur
+    const overlaySelectors = [
+        '.plotly-overlay',
+        '.plotly-selection-overlay',
+        '.plotly-backdrop',
+        '[class*="backdrop"]',
+        '[class*="overlay"]',
+        '[id*="backdrop"]',
+        '[id*="overlay"]'
+    ];
+    
+    overlaySelectors.forEach(selector => {
+        try {
+            const overlays = document.querySelectorAll(selector);
+            overlays.forEach(overlay => {
+                // Only remove if it's not part of the plot itself
+                if (!overlay.closest('#pitchPlotsChart')) {
+                    overlay.remove();
+                }
+            });
+        } catch (e) {
+            // Ignore selector errors
+        }
+    });
+    
+    // Force a repaint to ensure styles are applied
+    void document.body.offsetHeight;
+}
+
+// MutationObserver to watch for selection boxes being added
+let selectionBoxObserver = null;
+
+function startSelectionBoxObserver() {
+    const plotDiv = document.getElementById('pitchPlotsChart');
+    if (!plotDiv || selectionBoxObserver) return;
+    
+    // Stop any existing observer
+    if (selectionBoxObserver) {
+        selectionBoxObserver.disconnect();
+    }
+    
+    selectionBoxObserver = new MutationObserver(() => {
+        // If selection is disabled, remove any selection boxes that appear
+        if (!selectionEnabled) {
+            removeSelectionBox();
+        }
+    });
+    
+    selectionBoxObserver.observe(plotDiv, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['stroke-dasharray', 'class']
+    });
+}
+
+function stopSelectionBoxObserver() {
+    if (selectionBoxObserver) {
+        selectionBoxObserver.disconnect();
+        selectionBoxObserver = null;
+    }
+}
+
+// Helper function to aggressively remove selection box
+function removeSelectionBox() {
+    const plotDiv = document.getElementById('pitchPlotsChart');
+    if (!plotDiv) return;
+    
+    // Try multiple selectors to catch all possible selection box elements
+    const selectors = [
+        '.select-outline',
+        '.selection',
+        'rect[class*="select"]',
+        'path[class*="select"]',
+        'rect[stroke-dasharray]',
+        'path[stroke-dasharray]',
+        '.selectbox',
+        '.selection-rect',
+        'g[class*="select"]',
+        'g.selectbox',
+        'g.selection',
+        'g[class*="drag"]',
+        'rect[fill="none"]',
+        'path[fill="none"]'
+    ];
+    
+    selectors.forEach(selector => {
+        try {
+            const elements = plotDiv.querySelectorAll(selector);
+            elements.forEach(el => {
+                // Check if it's a dashed rectangle (likely selection box)
+                const strokeDash = el.getAttribute('stroke-dasharray');
+                const style = window.getComputedStyle(el);
+                if (strokeDash && strokeDash !== 'none' && strokeDash !== '0') {
+                    el.remove();
+                } else if (style.strokeDasharray !== 'none' && style.strokeDasharray !== '0px') {
+                    el.remove();
+                } else if (el.classList.contains('select') || el.classList.contains('selection')) {
+                    el.remove();
+                }
+            });
+        } catch (e) {
+            // Ignore selector errors
+        }
+    });
+    
+    // Check all SVG elements for dashed strokes (selection boxes are typically dashed)
+    try {
+        const allSVGElements = plotDiv.querySelectorAll('rect, path, line, polygon, g');
+        allSVGElements.forEach(el => {
+            const strokeDash = el.getAttribute('stroke-dasharray');
+            const fill = el.getAttribute('fill');
+            const stroke = el.getAttribute('stroke');
+            const style = window.getComputedStyle(el);
+            
+            // Remove any dashed rectangle or path (likely selection box)
+            // Be aggressive - remove any element with stroke-dasharray
+            if (strokeDash && strokeDash !== 'none' && strokeDash !== '0' && strokeDash !== '') {
+                el.remove();
+            }
+            // Also check computed style
+            else if (style.strokeDasharray && style.strokeDasharray !== 'none' && style.strokeDasharray !== '0px' && style.strokeDasharray !== '') {
+                el.remove();
+            }
+            // Remove any element with fill="none" and a stroke (likely outline)
+            else if (fill === 'none' && stroke && stroke !== 'none') {
+                // Check computed style for dash
+                if (style.strokeDasharray && style.strokeDasharray !== 'none' && style.strokeDasharray !== '0px') {
+                    el.remove();
+                }
+            }
+        });
+        
+        // Also check for any rectangles that might be selection boxes based on their position/size
+        // Selection boxes are typically rectangles that span a significant portion of the plot
+        const rects = plotDiv.querySelectorAll('rect');
+        rects.forEach(rect => {
+            const width = parseFloat(rect.getAttribute('width')) || 0;
+            const height = parseFloat(rect.getAttribute('height')) || 0;
+            const strokeDash = rect.getAttribute('stroke-dasharray');
+            const fill = rect.getAttribute('fill');
+            
+            // If it's a large rectangle with no fill and dashed stroke, it's likely a selection box
+            if ((width > 100 || height > 100) && (fill === 'none' || fill === 'transparent') && strokeDash) {
+                rect.remove();
+            }
+        });
+    } catch (e) {
+        // Ignore errors
+    }
+    
+    // Also try to clear Plotly's internal selection range
+    if (currentPlot && currentPlot._fullLayout) {
+        if (currentPlot._fullLayout.selection) {
+            currentPlot._fullLayout.selection = {};
+            delete currentPlot._fullLayout.selection;
+        }
+        // Clear any selection-related data
+        if (currentPlot._fullLayout.shapes) {
+            currentPlot._fullLayout.shapes = currentPlot._fullLayout.shapes.filter(shape => 
+                !shape.type || shape.type !== 'rect' || !shape.line || !shape.line.dash
+            );
+        }
+        // Clear selection from all axes
+        ['xaxis', 'yaxis', 'xaxis2', 'yaxis2'].forEach(axisName => {
+            if (currentPlot._fullLayout[axisName] && currentPlot._fullLayout[axisName].selection) {
+                delete currentPlot._fullLayout[axisName].selection;
+            }
+        });
+    }
+    
+    // Also try accessing Plotly's internal selection object directly
+    if (currentPlot && currentPlot._fullData) {
+        currentPlot._fullData.forEach(trace => {
+            if (trace.selectedpoints) {
+                trace.selectedpoints = null;
+            }
+        });
+    }
+}
+
+// Make functions globally accessible
+window.clearSelection = function() {
+    if (allPitchData && currentPlot) {
+        // Remove blur effects immediately
+        removeBlurEffects();
+        
+        // Clear selection using multiple methods
+        try {
+            Plotly.deselect(currentPlot);
+        } catch (e) {
+            console.log('Clear selection deselect error:', e);
+        }
+        
+        // Clear selected points
+        const traceIndices = Array.from({length: currentPlot.data.length}, (_, i) => i);
+        Plotly.restyle(currentPlot, {selectedpoints: [null]}, traceIndices);
+        
+        // Reset selection mode
+        selectionEnabled = false;
+        updateSelectionMode();
+        
+        // Regenerate plot to reset everything
+        if (selectedPitcher) {
+            generatePitchPlots();
+        }
+    }
+};
+
+function resetPlotView(data) {
+    if (currentPlot && data) {
+        // Disable selection mode first if it's enabled
+        if (selectionEnabled) {
+            selectionEnabled = false;
+            const toggleBtn = document.getElementById('toggleSelection');
+            const modeText = document.getElementById('selectionModeText');
+            if (toggleBtn && modeText) {
+                toggleBtn.classList.remove('active');
+                modeText.textContent = 'Enable Selection';
+                document.body.classList.remove('selection-active');
+            }
+        }
+        
+        // Remove blur effects immediately
+        removeBlurEffects();
+        
+        // First, clear selection using multiple methods - do this immediately
+        try {
+            Plotly.deselect(currentPlot);
+        } catch (e) {
+            console.log('Deselect error:', e);
+        }
+        
+        // Remove selection box immediately using helper function - call multiple times
+        removeSelectionBox();
+        
+        // Clear selected points on all traces
+        const traceIndices = Array.from({length: currentPlot.data.length}, (_, i) => i);
+        Plotly.restyle(currentPlot, {selectedpoints: [null]}, traceIndices);
+        
+        // Clear internal selection state more aggressively
+        if (currentPlot._fullLayout) {
+            if (currentPlot._fullLayout.selection) {
+                currentPlot._fullLayout.selection = {};
+                delete currentPlot._fullLayout.selection;
+            }
+            // Clear any selection-related data in the layout
+            if (currentPlot._fullLayout.xaxis && currentPlot._fullLayout.xaxis.rangeslider) {
+                delete currentPlot._fullLayout.xaxis.rangeslider;
+            }
+            if (currentPlot._fullLayout.yaxis && currentPlot._fullLayout.yaxis.rangeslider) {
+                delete currentPlot._fullLayout.yaxis.rangeslider;
+            }
+        }
+        
+        // Switch to zoom mode first to break out of selection mode
+        Plotly.relayout(currentPlot, {
+            'dragmode': 'zoom'
+        });
+        
+        // Wait a moment, then fully reset view
+        setTimeout(() => {
+            // First, enable autorange to reset any zoom/pan state
+            Plotly.relayout(currentPlot, {
+                'xaxis.autorange': true,
+                'yaxis.autorange': true
+            }).then(() => {
+                // Then set the specific ranges matching the initial layout
+                Plotly.relayout(currentPlot, {
+                    // Reset axis ranges to default (matching initial view)
+                    'xaxis.range': [-40, 40],
+                    'yaxis.range': [-20, 20],
+                    // Reset autorange to false to use fixed ranges
+                    'xaxis.autorange': false,
+                    'yaxis.autorange': false,
+                    // Reset domain (in case it was modified)
+                    'xaxis.domain': [0, 1],
+                    'yaxis.domain': [0, 1],
+                    // Reset scale anchor (to maintain aspect ratio)
+                    'yaxis.scaleanchor': 'x',
+                    'yaxis.scaleratio': 1,
+                    // Reset drag mode (ensure zoom mode)
+                    'dragmode': 'zoom',
+                    // Clear any selection ranges
+                    'xaxis.rangeslider': undefined,
+                    'yaxis.rangeslider': undefined,
+                    // Reset zoom and pan
+                    'xaxis.fixedrange': false,
+                    'yaxis.fixedrange': false
+                }).then(() => {
+                // Force deselect again after relayout
+                try {
+                    Plotly.deselect(currentPlot);
+                    // Remove selection box multiple times
+                    removeSelectionBox();
+                    // Force a full redraw by updating with current data
+                    Plotly.redraw(currentPlot);
+                    // Remove again after redraw with multiple attempts
+                    setTimeout(() => {
+                        removeSelectionBox();
+                        removeBlurEffects();
+                        // Try deselect again
+                        try {
+                            Plotly.deselect(currentPlot);
+                        } catch (e) {}
+                        // Final check - ensure view is reset with exact ranges
+                        Plotly.relayout(currentPlot, {
+                            'xaxis.range': [-40, 40],
+                            'yaxis.range': [-20, 20],
+                            'xaxis.autorange': false,
+                            'yaxis.autorange': false
+                        }).then(() => {
+                            // One more attempt to remove selection box
+                            setTimeout(() => {
+                                removeSelectionBox();
+                                Plotly.deselect(currentPlot);
+                            }, 50);
+                        });
+                    }, 100);
+                } catch (e) {
+                    console.log('Post-relayout deselect error:', e);
+                }
+                });
+            });
+            
+            // Keep removing selection boxes for a few seconds to catch any that get re-added
+            let attempts = 0;
+            const maxAttempts = 20;
+            const intervalId = setInterval(() => {
+                attempts++;
+                removeSelectionBox();
+                try {
+                    Plotly.deselect(currentPlot);
+                } catch (e) {}
+                if (attempts >= maxAttempts) {
+                    clearInterval(intervalId);
+                }
+            }, 100);
+        }, 10);
+        
+        updatePitchTypeTable(data.pitches, data.pitcher);
+    }
+}
+
+function toggleSelectionMode() {
+    try {
+        selectionEnabled = !selectionEnabled;
+        updateSelectionMode();
+    } catch (error) {
+        console.error('Error toggling selection mode:', error);
+        // Fallback: ensure button is still clickable
+        const toggleBtn = document.getElementById('toggleSelection');
+        if (toggleBtn) {
+            toggleBtn.style.pointerEvents = 'auto';
+            toggleBtn.style.zIndex = '100';
+        }
+    }
+}
+
+function updateSelectionMode() {
+    const toggleBtn = document.getElementById('toggleSelection');
+    const modeText = document.getElementById('selectionModeText');
+    
+    if (!toggleBtn || !modeText || !currentPlot) {
+        console.warn('Missing elements for updateSelectionMode:', { toggleBtn, modeText, currentPlot });
+        return;
+    }
+    
+    // Ensure button is always clickable
+    toggleBtn.style.pointerEvents = 'auto';
+    toggleBtn.style.zIndex = '100';
+    toggleBtn.style.cursor = 'pointer';
+    
+    if (selectionEnabled) {
+        // Enable box selection
+        Plotly.relayout(currentPlot, {
+            'dragmode': 'select'
+        });
+        modeText.textContent = 'Disable Selection';
+        toggleBtn.classList.add('active');
+        // Add class to body to track selection state
+        document.body.classList.add('selection-active');
+    } else {
+        // Remove selection active class
+        document.body.classList.remove('selection-active');
+        // Remove blur effects immediately when disabling selection
+        removeBlurEffects();
+        
+        // Clear any existing selection box visually first - do this immediately
+        try {
+            Plotly.deselect(currentPlot);
+        } catch (e) {
+            console.log('Deselect error:', e);
+        }
+        
+        // Remove selection box immediately using helper function
+        removeSelectionBox();
+        
+        // Clear selected points on all traces
+        const traceIndices = Array.from({length: currentPlot.data.length}, (_, i) => i);
+        Plotly.restyle(currentPlot, {selectedpoints: [null]}, traceIndices);
+        
+        // Clear internal selection state
+        if (currentPlot._fullLayout && currentPlot._fullLayout.selection) {
+            currentPlot._fullLayout.selection = {};
+        }
+        
+        // Disable selection (switch to zoom) and clear selection
+        Plotly.relayout(currentPlot, {
+            'dragmode': 'zoom',
+            'xaxis.autorange': false,
+            'yaxis.autorange': false
+        }).then(() => {
+            // Force deselect again and redraw after relayout completes
+            try {
+                Plotly.deselect(currentPlot);
+                // Remove blur effects again
+                removeBlurEffects();
+                // Remove any remaining selection box SVG elements
+                removeSelectionBox();
+                // Force a redraw to remove selection box
+                Plotly.redraw(currentPlot);
+                // Remove again after redraw
+                setTimeout(() => {
+                    removeSelectionBox();
+                    removeBlurEffects();
+                }, 100);
+            } catch (e) {
+                console.log('Post-relayout deselect error:', e);
+            }
+        });
+        
+        modeText.textContent = 'Enable Selection';
+        toggleBtn.classList.remove('active');
+        
+        // Reset table to show all pitches
+        if (allPitchData) {
+            updatePitchTypeTable(allPitchData.pitches, allPitchData.pitcher);
+        }
+    }
+}
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+    font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--color-text-primary);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-page-bg) 85%, white), var(--color-page-bg));
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.back-button:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.pitchplots-controls {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    box-shadow: var(--shadow-floating);
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.control-group-full {
+    grid-column: 1 / -1;
+}
+
+.control-label {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.control-input,
+.control-select {
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    padding: 0.75rem;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+}
+
+.control-input:focus,
+.control-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px rgba(255, 127, 0, 0.2);
+}
+
+.control-checkbox {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+}
+
+.player-search-container {
+    position: relative;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    margin-top: 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.player-dropdown-item {
+    padding: 0.75rem 1rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.player-dropdown-item:hover {
+    background: #3a3a3a;
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--color-surface-muted);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-top: 0.5rem;
+}
+
+.selected-player-display span {
+    color: var(--color-text-primary);
+    font-weight: 500;
+}
+
+.clear-player-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    background: var(--color-layer-soft);
+    color: var(--color-text-primary);
+}
+
+.generate-btn {
+    grid-column: 1 / -1;
+    background: linear-gradient(135deg, var(--color-accent) 0%, #FF9F40 100%);
+    border: none;
+    border-radius: 8px;
+    padding: 1rem 2rem;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 0.5rem;
+}
+
+.generate-btn:hover:not(.disabled):not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.4);
+}
+
+.generate-btn.disabled,
+.generate-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.pitchplots-container {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 18px;
+    padding: 2rem;
+    box-shadow: var(--shadow-elevated);
+}
+
+.pitchplots-wrapper {
+    width: 100%;
+}
+
+.plot-controls {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+    justify-content: flex-end;
+    position: relative;
+    z-index: 100;
+    pointer-events: auto !important;
+}
+
+.plot-control-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--color-layer-soft);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    z-index: 100;
+    pointer-events: auto !important;
+    user-select: none;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.plot-control-btn:hover {
+    background: color-mix(in srgb, var(--color-layer-soft) 90%, var(--color-surface));
+    border-color: var(--color-border-strong);
+}
+
+.plot-control-btn.active {
+    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-bright));
+    border-color: var(--color-accent);
+    color: var(--color-text-inverse);
+    box-shadow: 0 8px 20px var(--color-accent-soft);
+}
+
+.plot-control-btn.active:hover {
+    background: linear-gradient(135deg, var(--color-accent-bright), var(--color-accent));
+    border-color: var(--color-accent-bright);
+}
+
+.pitchplots-chart {
+    width: 100%;
+    min-height: 600px;
+    background: var(--color-layer-soft);
+    border-radius: 16px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.pitchplots-chart-inner {
+    width: 100%;
+    height: 100%;
+    min-height: 600px;
+}
+
+.pitchplots-info {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.pitchplots-info p {
+    color: var(--color-text-muted);
+    margin: 0;
+}
+
+.pitchplots-summary {
+    color: var(--color-text-muted);
+}
+
+.pitchplots-summary h3 {
+    color: var(--color-text-primary);
+    margin: 0 0 1rem 0;
+    font-size: 1.2rem;
+}
+
+.summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.summary-stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: var(--color-layer-soft);
+    border-radius: 10px;
+    border: 1px solid var(--color-layer-border);
+}
+
+.stat-label {
+    color: var(--color-text-muted);
+}
+
+.stat-value {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.pitch-type-table-container {
+    margin-top: 0;
+    padding-top: 0;
+}
+
+.selection-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--color-layer-soft);
+    border-radius: 10px;
+    border: 1px solid var(--color-layer-border);
+}
+
+.clear-selection-btn {
+    background: var(--color-accent);
+    border: none;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+    color: var(--color-text-primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.clear-selection-btn:hover {
+    background: #FF9F40;
+    transform: translateY(-1px);
+}
+
+.pitch-type-table-container h3 {
+    color: var(--color-text-primary);
+    margin: 0 0 1rem 0;
+    font-size: 1.2rem;
+}
+
+.table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.pitch-type-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--color-surface);
+    font-size: 0.9rem;
+}
+
+.pitch-type-table thead {
+    background: var(--color-surface-muted);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.pitch-type-table th {
+    padding: 0.75rem 0.5rem;
+    text-align: left;
+    color: var(--color-text-primary);
+    font-weight: 600;
+    border-bottom: 2px solid var(--color-border-strong);
+    white-space: nowrap;
+    font-size: 0.85rem;
+}
+
+.pitch-type-table td {
+    padding: 0.75rem 0.5rem;
+    color: var(--color-text-muted);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.pitch-type-table tbody tr:hover {
+    background: var(--color-surface-muted);
+}
+
+.pitch-type-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.pitch-type-cell {
+    font-weight: 600;
+    color: var(--color-text-primary);
+    padding-left: 0.75rem !important;
+}
+
+.pitch-type-table small {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--color-text-subtle);
+    margin-top: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .pitch-type-table {
+        font-size: 0.8rem;
+    }
+    
+    .pitch-type-table th,
+    .pitch-type-table td {
+        padding: 0.5rem 0.4rem;
+    }
+}
+
+/* Prevent Plotly from applying blur effects */
+body.plotly-graph-div-selected,
+body:has(.plotly-graph-div-selected),
+.page-container:has(.plotly-graph-div-selected),
+.pitchplots-container:has(.plotly-graph-div-selected) {
+    filter: none !important;
+    backdrop-filter: none !important;
+}
+
+.js-plotly-plot-selected,
+.plotly-graph-div-selected,
+.plotly[class*="selected"] {
+    filter: none !important;
+    backdrop-filter: none !important;
+}
+
+/* Ensure no blur on any elements when selection is disabled */
+body:not(.selection-active) *,
+.pitchplots-container:not(.selection-active) * {
+    filter: none !important;
+    backdrop-filter: none !important;
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .header-content {
+        flex-direction: column;
+    }
+    
+    .pitchplots-controls {
+        grid-template-columns: 1fr;
+    }
+    
+    .pitchplots-chart {
+        min-height: 400px;
+    }
+}
+</style>
+{% endblock %}
+

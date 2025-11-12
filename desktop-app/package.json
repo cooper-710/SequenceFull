@@ -1,0 +1,82 @@
+{
+  "name": "scouting-report-desktop",
+  "version": "1.0.0",
+  "description": "Desktop application for Scouting Report Generator",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
+  },
+  "keywords": [
+    "scouting",
+    "baseball",
+    "report"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0"
+  },
+  "build": {
+    "appId": "com.scoutingreport.app",
+    "productName": "Scouting Report",
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.sports",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": "nsis"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "target": "AppImage"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/**/*",
+      "!dist/**/*",
+      "!src/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../src",
+        "to": "src",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../venv",
+        "to": "venv",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../templates",
+        "to": "templates",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../assets",
+        "to": "assets",
+        "filter": ["**/*"]
+      }
+    ]
+  }
+}
+

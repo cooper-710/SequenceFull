@@ -1,0 +1,516 @@
+{% extends "base.html" %}
+
+{% block title %}Visuals - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <header class="section-hero">
+        <div class="section-hero-heading">
+            <h1 class="hero-content">Data Visualizations</h1>
+        </div>
+    </header>
+
+    <div class="content-wrapper">
+        <!-- Category: General Analytics -->
+        <div class="visual-category">
+            <div class="category-header">
+                <div class="category-icon">
+                    <i class="fas fa-chart-area"></i>
+                </div>
+                <h2 class="category-title">General Analytics</h2>
+                <p class="category-description">Comprehensive performance metrics and trends</p>
+            </div>
+            <div class="visuals-grid">
+            <a href="{{ url_for('heatmaps') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-th"></i>
+                            </div>
+                            <h3>Heatmaps</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Interactive heatmaps showing player performance metrics and statistical distributions across seasons and teams.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ url_for('spraychart') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-baseball-ball"></i>
+                            </div>
+                            <h3>Spray Chart</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Interactive spray charts showing where batted balls land on the field, with filtering by hit type, launch angle, and exit velocity.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ url_for('timeline') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <h3>Performance Timeline</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Interactive animated timeline showing player performance trends across seasons with multi-metric comparisons, season highlights, and predictive insights.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+            </div>
+        </div>
+
+        <!-- Category: Batter Analytics -->
+        <div class="visual-category">
+            <div class="category-header">
+                <div class="category-icon">
+                    <i class="fas fa-baseball-ball"></i>
+                </div>
+                <h2 class="category-title">Batter Analytics</h2>
+                <p class="category-description">Hitting performance, plate discipline, and batted ball analysis</p>
+            </div>
+            <div class="visuals-grid">
+            <a href="{{ url_for('barrel_quality_contact') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-bullseye"></i>
+                            </div>
+                            <h3>Barrel Rate & Quality of Contact</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Comprehensive batted ball analysis with launch angle/exit velocity scatter plots, barrel rate zones, sweet spot percentages, and quality of contact breakdowns.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ url_for('swing_decision_matrix') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <h3>Swing Decision Matrix</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Advanced swing/take decision visualization by pitch location with run value overlays, showing optimal decision zones and chase rate heatmaps.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ url_for('plate_discipline_matrix') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-th-large"></i>
+                            </div>
+                            <h3>Plate Discipline Matrix</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Visual matrix comparing swing rates, chase rates, and contact rates across different pitch types and locations to assess plate discipline.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ url_for('count_performance') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-chart-bar"></i>
+                            </div>
+                            <h3>Count Performance Breakdown</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Detailed analysis of batter performance across different ball-strike counts, showing success rates, pitch selection, and outcome probabilities.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+            </div>
+        </div>
+
+        <!-- Category: Pitcher Analytics -->
+        <div class="visual-category">
+            <div class="category-header">
+                <div class="category-icon">
+                    <i class="fas fa-baseball"></i>
+                </div>
+                <h2 class="category-title">Pitcher Analytics</h2>
+                <p class="category-description">Pitch analysis, arsenal effectiveness, and velocity trends</p>
+            </div>
+            <div class="visuals-grid">
+            <a href="{{ url_for('pitchplots') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-baseball"></i>
+                            </div>
+                            <h3>Pitch Plots</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Interactive Trackman-style movement plots for pitchers with advanced filtering by pitch type, count, velocity, and movement metrics.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ url_for('pitch_arsenal_effectiveness') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <h3>Pitch Arsenal Effectiveness</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Multi-dimensional pitch effectiveness dashboard showing run value heatmaps by zone, whiff rate zones, ground ball rates, and putaway percentages.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ url_for('pitch_mix_analysis') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-chart-pie"></i>
+                            </div>
+                            <h3>Pitch Mix Analysis</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Comprehensive breakdown of pitcher pitch mix patterns by count, situation, and batter handedness with effectiveness metrics.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+
+            <a href="{{ url_for('velocity_trends') }}" class="visual-card-link">
+                <div class="visual-card">
+                    <div class="card-gradient"></div>
+                    <div class="visual-content">
+                        <div class="visual-header">
+                            <div class="visual-icon-wrapper">
+                                <i class="fas fa-tachometer-alt"></i>
+                            </div>
+                            <h3>Velocity Trends</h3>
+                        </div>
+                        <div class="visual-description">
+                            <p>Time-series analysis of pitch velocity and exit velocity trends throughout games, seasons, and careers with fatigue indicators.</p>
+                        </div>
+                        <div class="visual-footer">
+                            <span class="view-link">View Visualization <i class="fas fa-arrow-right"></i></span>
+                        </div>
+                    </div>
+                </div>
+            </a>
+            </div>
+        </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.visual-category {
+    margin-bottom: 4rem;
+}
+
+.category-header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--color-layer-soft);
+    border-radius: 12px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-floating);
+}
+
+.category-icon {
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(135deg, rgba(255, 127, 0, 0.15), rgba(255, 149, 0, 0.1));
+    border: 2px solid rgba(255, 127, 0, 0.3);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.category-icon i {
+    font-size: 24px;
+    color: var(--color-accent);
+}
+
+.category-title {
+    font-size: 1.75rem;
+    color: var(--color-text-primary);
+    margin: 0 0 0.5rem 0;
+    font-weight: 700;
+}
+
+.category-description {
+    color: var(--color-text-subtle);
+    font-size: 0.95rem;
+    margin: 0;
+}
+
+.visuals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    gap: 1.5rem;
+}
+
+.visual-card-link {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+
+.visual-card {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    box-shadow: var(--shadow-floating);
+}
+
+.card-gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.6s ease;
+    z-index: 1;
+}
+
+.visual-card:hover .card-gradient {
+    transform: translateX(100%);
+}
+
+.visual-card:hover {
+    border-color: var(--color-accent);
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 0 12px 40px rgba(255, 127, 0, 0.25);
+}
+
+.visual-content {
+    padding: 1.75rem;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+    z-index: 2;
+}
+
+.visual-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.visual-icon-wrapper {
+    width: 50px;
+    height: 50px;
+    background: linear-gradient(135deg, rgba(255, 127, 0, 0.15), rgba(255, 149, 0, 0.1));
+    border: 2px solid rgba(255, 127, 0, 0.3);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+
+.visual-card:hover .visual-icon-wrapper {
+    background: linear-gradient(135deg, rgba(255, 127, 0, 0.25), rgba(255, 149, 0, 0.2));
+    border-color: var(--color-accent);
+    transform: scale(1.1) rotate(5deg);
+}
+
+.visual-icon-wrapper i {
+    color: var(--color-accent);
+    font-size: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.visual-card:hover .visual-icon-wrapper i {
+    transform: scale(1.1);
+}
+
+.visual-header h3 {
+    color: var(--color-text-primary);
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin: 0;
+    flex: 1;
+    line-height: 1.3;
+}
+
+.visual-description {
+    flex: 1;
+    margin-bottom: 1.5rem;
+}
+
+.visual-description p {
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+    line-height: 1.7;
+    margin: 0;
+}
+
+.visual-footer {
+    margin-top: auto;
+    padding-top: 1rem;
+    border-top: 1px solid var(--color-border);
+}
+
+.view-link {
+    color: var(--color-accent);
+    font-size: 0.9rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.visual-card:hover .view-link {
+    gap: 0.75rem;
+    color: var(--color-accent-bright);
+}
+
+.view-link i {
+    transition: transform 0.3s ease;
+}
+
+.visual-card:hover .view-link i {
+    transform: translateX(4px);
+}
+
+@media (max-width: 1024px) {
+    .visuals-grid {
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .section-hero {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .section-hero-meta {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .visuals-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .category-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .category-title {
+        font-size: 1.5rem;
+    }
+}
+</style>
+
+{% endblock %}
+

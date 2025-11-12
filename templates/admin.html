@@ -1,0 +1,1200 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container admin-page">
+    <header class="section-hero">
+        <div class="section-hero-heading">
+            <h1 class="hero-content">Admin Control Center</h1>
+        </div>
+        <div class="section-hero-meta">
+            <span class="meta-pill">
+                <i class="fas fa-users"></i>
+                <span id="totalPlayers">0 players</span>
+            </span>
+            <span class="meta-pill">
+                <i class="fas fa-file-lines"></i>
+                <span id="totalDocs">0 docs</span>
+            </span>
+        </div>
+    </header>
+
+    <section class="admin-search-stack">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input id="playerSearchInput" type="text" placeholder="Search by name or email">
+            <div class="search-hint" id="playerSearchHelp">Start typing to find a player.</div>
+            <div class="player-search-results" id="playerSearchResults"></div>
+        </div>
+        <div class="quick-actions">
+            <button class="quick-btn" id="refreshPlayers">
+                <i class="fas fa-rotate-right"></i>
+                Refresh list
+            </button>
+            <a class="quick-btn" href="/register" target="_blank" rel="noopener">
+                <i class="fas fa-user-plus"></i>
+                Invite player
+            </a>
+        </div>
+    </section>
+
+    <div class="admin-grid">
+        <aside class="player-summary">
+            <div class="summary-card media">
+                <div class="avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div>
+                    <h2 id="selectedPlayerName">No player selected</h2>
+                    <p id="selectedPlayerEmail" class="subtle">Pick someone from search or the table.</p>
+                </div>
+            </div>
+
+            <form id="playerDocForm" class="summary-card upload" enctype="multipart/form-data">
+                <h3>Upload document</h3>
+                <p class="subtle" id="playerUploadName">Choose a player to enable uploading.</p>
+                <label class="upload-slot">
+                    <input type="file" id="playerDocFile" name="document" required>
+                    <span id="uploadSlotText"><i class="fas fa-file-arrow-up"></i> Drop file or click to browse</span>
+                </label>
+                <div class="series-select">
+                    <label for="playerDocSeries">Series</label>
+                    <select id="playerDocSeries" name="series_id" required disabled>
+                        <option value="">Select series</option>
+                        <option value="__none__" data-opponent="" data-label="No Specific Series" data-start="" data-end="">No Specific Series</option>
+                    </select>
+                    <p id="playerDocSeriesHelper" class="series-helper subtle">Select a player to load series.</p>
+                </div>
+                <input type="hidden" name="series_opponent" id="playerDocSeriesOpponent">
+                <input type="hidden" name="series_label" id="playerDocSeriesLabel">
+                <input type="hidden" name="series_start" id="playerDocSeriesStart">
+                <input type="hidden" name="series_end" id="playerDocSeriesEnd">
+                <div class="upload-actions">
+                    <button type="submit" class="btn-primary" id="uploadDocBtn">
+                        <i class="fas fa-upload"></i> Upload
+                    </button>
+                    <button type="button" class="btn-secondary" id="resetDocBtn">Reset</button>
+                </div>
+            </form>
+        </aside>
+
+        <section class="player-content">
+            <nav class="tab-switcher">
+                <button class="tab active" data-tab="documents">Documents</button>
+                <button class="tab" data-tab="activity">Activity</button>
+            </nav>
+
+            <div class="tab-card" id="documentsTab">
+                <header class="tab-toolbar">
+                    <span id="playerDocStatus" class="subtle">Select a player to view documents.</span>
+                    <label class="sort-control">
+                        Sort
+                        <select id="playerDocSort">
+                            <option value="desc">Newest first</option>
+                            <option value="asc">Oldest first</option>
+                        </select>
+                    </label>
+                </header>
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>File</th>
+                            <th>Uploaded</th>
+                            <th>Series</th>
+                            <th class="col-actions">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="playerDocList">
+                        <tr><td colspan="4" class="table-placeholder">No documents yet.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="tab-card" id="activityTab" style="display:none;">
+                <header class="tab-toolbar">
+                    <span class="subtle">History of uploads and deletes.</span>
+                </header>
+                <ul class="activity-feed" id="playerDocLogList">
+                    <li class="table-placeholder">No activity yet.</li>
+                </ul>
+                <button type="button" class="activity-more-btn" id="playerDocLogShowAll" style="display:none;">
+                    <i class="fas fa-list"></i>
+                    <span>View complete activity</span>
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <section class="admin-card accounts-card">
+        <header>
+            <div>
+                <h2>Player Accounts</h2>
+                <p class="subtle">Tap a row to jump into their documents.</p>
+            </div>
+            <div class="filter-box">
+                <i class="fas fa-filter"></i>
+                <input id="accountsSearch" type="text" placeholder="Filter players">
+            </div>
+        </header>
+
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Email</th>
+                        <th>Name</th>
+                        <th>Created</th>
+                        <th>Updated</th>
+                    </tr>
+                </thead>
+                <tbody id="accountsTableBody">
+                    <tr><td colspan="4" class="table-placeholder">Loading player accounts…</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+:root {
+    --card-radius: 16px;
+    --tile-radius: 14px;
+}
+.admin-page {
+    display: grid;
+    gap: 28px;
+}
+.meta-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    color: var(--color-accent);
+    font-weight: 600;
+}
+.admin-search-stack {
+    display: flex;
+    gap: 18px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+.search-box {
+    flex: 1;
+    position: relative;
+    display: grid;
+    gap: 6px;
+}
+.search-box input {
+    width: 100%;
+    padding: 12px 16px 12px 40px;
+    border-radius: var(--card-radius);
+    border: 1px solid var(--color-layer-border);
+    background: var(--color-layer-card);
+    color: var(--color-text-primary);
+}
+.search-box i {
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    color: var(--color-text-subtle);
+}
+.search-hint {
+    font-size: 0.85rem;
+    color: var(--color-text-subtle);
+}
+.quick-actions {
+    display: flex;
+    gap: 10px;
+}
+.quick-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: var(--tile-radius);
+    border: 1px solid var(--color-layer-border);
+    background: var(--color-layer-soft);
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    transition: border-color .2s ease, color .2s ease;
+}
+.quick-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+.admin-grid {
+    display: grid;
+    column-gap: 40px;
+    row-gap: 24px;
+    grid-template-columns: 360px minmax(0, 1fr);
+    grid-template-areas: "summary content";
+    align-items: start;
+}
+.player-summary {
+    display: grid;
+    gap: 18px;
+    width: 100%;
+    max-width: 360px;
+    grid-column: 1;
+    grid-area: summary;
+    padding-right: 8px;
+}
+.summary-card {
+    border-radius: var(--card-radius);
+    border: 1px solid var(--color-layer-border);
+    background: var(--color-layer-card);
+    padding: 20px;
+    display: grid;
+    gap: 14px;
+}
+.summary-card.media {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+}
+.summary-card.upload {
+    gap: 18px;
+}
+.avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(140deg, rgba(255,127,0,.5), rgba(255,127,0,.15));
+    color: var(--color-accent);
+    font-size: 30px;
+}
+.subtle {
+    color: var(--color-text-subtle);
+}
+.upload-slot {
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--tile-radius);
+    background: var(--color-layer-soft);
+    cursor: pointer;
+    text-align: center;
+    color: var(--color-text-secondary);
+}
+.upload-slot input {
+    display: none;
+}
+.upload-actions {
+    display: flex;
+    gap: 10px;
+}
+.series-info {
+    display: grid;
+    gap: 4px;
+}
+.series-info .series-label {
+    font-weight: 600;
+}
+.series-info .series-window {
+    font-size: 0.8rem;
+    color: var(--color-text-subtle);
+}
+.series-info .series-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.series-select {
+    display: grid;
+    gap: 6px;
+    margin-top: 14px;
+}
+.series-select label {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: var(--color-text-secondary);
+}
+.series-select select {
+    padding: 10px;
+    border-radius: var(--tile-radius);
+    border: 1px solid var(--color-layer-border);
+    background: var(--color-layer-card);
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+.series-select select:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.series-helper {
+    margin: 0;
+    font-size: 0.8rem;
+}
+.series-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+    color: var(--color-accent);
+}
+.series-pill.upcoming {
+    background: color-mix(in srgb, var(--color-highlight) 18%, transparent);
+    color: var(--color-highlight);
+}
+.series-pill.current {
+    background: color-mix(in srgb, #22c55e 22%, transparent);
+    color: #15803d;
+}
+.series-pill.expired {
+    background: color-mix(in srgb, var(--color-text-subtle) 18%, transparent);
+    color: var(--color-text-subtle);
+}
+.player-content {
+    display: grid;
+    gap: 18px;
+    min-width: 0;
+    grid-column: 2;
+    grid-area: content;
+    margin-left: 0;
+    justify-items: start;
+    padding-left: 48px;
+    padding-right: 16px;
+}
+.player-content > * {
+    width: 100%;
+}
+.player-content .tab-card {
+    max-width: clamp(540px, 70vw, 700px);
+}
+.tab-switcher {
+    display: inline-flex;
+    gap: 6px;
+    padding: 4px;
+    border-radius: 999px;
+    background: var(--color-layer-soft);
+}
+.tab {
+    border: none;
+    padding: 8px 18px;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s ease, color .2s ease;
+    min-width: 140px;
+    text-align: center;
+}
+.tab-switcher .tab {
+    flex: 1;
+}
+.tab.active {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+}
+.tab-card {
+    border-radius: var(--card-radius);
+    border: 1px solid var(--color-layer-border);
+    background: var(--color-surface);
+    padding: 20px;
+    overflow-x: auto;
+    max-width: 660px;
+    margin: 0;
+}
+.tab-toolbar {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 16px;
+}
+.sort-control {
+    display: inline-flex;
+    gap: 10px;
+    align-items: center;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+.sort-control select {
+    border-radius: 999px;
+    border: 1px solid var(--color-layer-border);
+    padding: 6px 12px;
+    background: var(--color-layer-card);
+    color: var(--color-text-primary);
+}
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.data-table th,
+.data-table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--color-layer-border);
+    text-align: left;
+}
+.data-table tbody tr:hover {
+    background: color-mix(in srgb, var(--color-accent) 6%, var(--color-surface));
+}
+.note-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.note-actions .btn-secondary {
+    padding: 8px 12px;
+}
+.col-actions {
+    width: 150px;
+}
+.activity-feed {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 12px;
+}
+.activity-feed li {
+    border-radius: var(--tile-radius);
+    border: 1px solid var(--color-layer-border);
+    padding: 14px 16px;
+    background: var(--color-layer-soft);
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+}
+.activity-more-btn {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: var(--tile-radius);
+    border: 1px solid var(--color-layer-border);
+    background: var(--color-layer-soft);
+    color: var(--color-text-secondary);
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color .2s ease, color .2s ease;
+}
+.activity-more-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+.activity-more-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+.activity-more-btn i {
+    font-size: 0.9rem;
+}
+.accounts-card {
+    border-radius: var(--card-radius);
+}
+.accounts-card header {
+    display: flex;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: flex-end;
+    margin-bottom: 16px;
+}
+.accounts-card header h2 {
+    color: var(--color-text-primary);
+}
+.filter-box {
+    position: relative;
+    width: min(260px, 100%);
+}
+.filter-box input {
+    width: 100%;
+    padding: 10px 14px 10px 40px;
+    border-radius: var(--tile-radius);
+    border: 1px solid var(--color-layer-border);
+    background: var(--color-layer-card);
+    color: var(--color-text-primary);
+}
+.filter-box i {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    color: var(--color-text-subtle);
+}
+.table-placeholder {
+    text-align: center;
+    color: var(--color-text-subtle);
+    padding: 20px 0;
+}
+.btn-primary,
+.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-radius: var(--tile-radius);
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.btn-primary {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+}
+.btn-primary:disabled {
+    opacity: .6;
+}
+.btn-secondary {
+    background: transparent;
+    border: 1px solid var(--color-layer-border);
+    color: var(--color-text-secondary);
+}
+.btn-secondary:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+.player-search-results {
+    position: absolute;
+    inset: calc(100% + 6px) 0 auto 0;
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: var(--tile-radius);
+    box-shadow: var(--shadow-elevated);
+    max-height: 240px;
+    overflow-y: auto;
+    display: none;
+    z-index: 20;
+}
+.player-search-results .result-item {
+    padding: 10px 14px;
+    display: grid;
+    gap: 4px;
+    cursor: pointer;
+}
+.player-search-results .result-item:hover {
+    background: color-mix(in srgb, var(--color-accent) 10%, var(--color-layer-card));
+}
+@media (max-width: 1080px) {
+    .admin-grid {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "summary"
+            "content";
+    }
+    .admin-hero {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .admin-search-stack {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .accounts-card header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .player-content {
+        margin-left: 0;
+        justify-items: stretch;
+        padding-left: 0;
+    }
+    .player-summary {
+        max-width: 100%;
+        padding-right: 0;
+    }
+    .player-content .tab-card {
+        max-width: 100%;
+    }
+}
+</style>
+<script>
+(function() {
+    const playerSearchInput = document.getElementById('playerSearchInput');
+    const playerSearchResults = document.getElementById('playerSearchResults');
+    const playerSearchHelp = document.getElementById('playerSearchHelp');
+    const selectedPlayerName = document.getElementById('selectedPlayerName');
+    const selectedPlayerEmail = document.getElementById('selectedPlayerEmail');
+    const playerUploadName = document.getElementById('playerUploadName');
+    const playerDocForm = document.getElementById('playerDocForm');
+    const playerDocFile = document.getElementById('playerDocFile');
+    const uploadDocBtn = document.getElementById('uploadDocBtn');
+    const uploadSlotText = document.getElementById('uploadSlotText');
+    const docsCountPill = document.querySelector('.docs-count-pill');
+    const playerDocStatus = document.getElementById('playerDocStatus');
+    const defaultUploadText = '<i class="fas fa-file-arrow-up"></i> Drop file or click to browse';
+    const playerDocSeries = document.getElementById('playerDocSeries');
+    const playerDocSeriesHelper = document.getElementById('playerDocSeriesHelper');
+    const playerDocSeriesOpponent = document.getElementById('playerDocSeriesOpponent');
+    const playerDocSeriesLabel = document.getElementById('playerDocSeriesLabel');
+    const playerDocSeriesStart = document.getElementById('playerDocSeriesStart');
+    const playerDocSeriesEnd = document.getElementById('playerDocSeriesEnd');
+
+    const playerDocList = document.getElementById('playerDocList');
+    const playerDocLogList = document.getElementById('playerDocLogList');
+    const playerDocLogShowAll = document.getElementById('playerDocLogShowAll');
+    const playerDocLogShowAllLabel = playerDocLogShowAll ? playerDocLogShowAll.querySelector('span') : null;
+    const playerDocSort = document.getElementById('playerDocSort');
+    const resetDocBtn = document.getElementById('resetDocBtn');
+    const documentsTab = document.getElementById('documentsTab');
+    const activityTab = document.getElementById('activityTab');
+    const tabButtons = document.querySelectorAll('.tab-switcher .tab');
+    const accountsTableBody = document.getElementById('accountsTableBody');
+    const accountsSearch = document.getElementById('accountsSearch');
+    const totalPlayersEl = document.getElementById('totalPlayers');
+    const totalDocsEl = document.getElementById('totalDocs');
+    const refreshPlayersBtn = document.getElementById('refreshPlayers');
+
+    const ACTIVITY_LOG_PAGE_SIZE = 10;
+
+    let allPlayers = [];
+    let currentPlayer = null;
+    let currentDocs = [];
+    let currentLogEntries = [];
+    let showingAllActivity = false;
+    let currentSeriesOptions = [];
+
+    function formatCount(count, singular) {
+        const label = count === 1 ? singular : `${singular}s`;
+        return `${count} ${label}`;
+    }
+
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;',
+        }[char]));
+    }
+
+    async function fetchJSON(url, options = {}) {
+        const response = await fetch(url, {
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            credentials: 'same-origin',
+            ...options
+        });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            const message = error.error || response.statusText || 'Request failed';
+            throw new Error(message);
+        }
+        return response.json();
+    }
+
+    function resetSeriesSelection(disable = true) {
+        currentSeriesOptions = [];
+        playerDocSeries.innerHTML = `
+            <option value="">Select series</option>
+            <option value="__none__" data-opponent="" data-label="No Specific Series" data-start="" data-end="">No Specific Series</option>
+        `;
+        playerDocSeries.disabled = disable;
+        playerDocSeries.value = '';
+        playerDocSeriesHelper.textContent = disable ? 'Select a player to load series.' : 'Select which series this document belongs to.';
+        updateSeriesHiddenFields();
+    }
+
+    function updateSeriesHiddenFields() {
+        const option = playerDocSeries.selectedOptions[0];
+        if (!option || !option.value || option.value === '__none__') {
+            if (option && option.value === '__none__') {
+                playerDocSeriesLabel.value = 'No Specific Series';
+            } else {
+                playerDocSeriesLabel.value = '';
+            }
+            playerDocSeriesOpponent.value = '';
+            playerDocSeriesStart.value = '';
+            playerDocSeriesEnd.value = '';
+            return;
+        }
+        playerDocSeriesOpponent.value = option.dataset.opponent || '';
+        playerDocSeriesLabel.value = option.dataset.label || option.textContent || '';
+        playerDocSeriesStart.value = option.dataset.start || '';
+        playerDocSeriesEnd.value = option.dataset.end || '';
+    }
+
+    function renderSeriesOptions(options = []) {
+        currentSeriesOptions = options || [];
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Select series';
+        const noneOption = document.createElement('option');
+        noneOption.value = '__none__';
+        noneOption.dataset.opponent = '';
+        noneOption.dataset.label = 'No Specific Series';
+        noneOption.dataset.start = '';
+        noneOption.dataset.end = '';
+        noneOption.textContent = 'No Specific Series';
+        playerDocSeries.innerHTML = '';
+        playerDocSeries.appendChild(defaultOption);
+        playerDocSeries.appendChild(noneOption);
+        playerDocSeries.disabled = false;
+        if (!currentSeriesOptions.length) {
+            playerDocSeriesHelper.textContent = 'No current or upcoming series found. Use "No Specific Series" if needed.';
+            playerDocSeries.value = '__none__';
+            updateSeriesHiddenFields();
+            return;
+        }
+
+        currentSeriesOptions.forEach((series, index) => {
+            const option = document.createElement('option');
+            const baseLabel = series.series_label || `${series.is_home ? 'Home vs' : 'Road @'} ${series.opponent_name || series.opponent_abbr || 'Opponent'}`;
+            option.value = String(index);
+            option.textContent = series.range ? `${baseLabel} • ${series.range}` : baseLabel;
+            option.dataset.opponent = series.opponent_abbr || series.opponent_name || '';
+            option.dataset.label = baseLabel;
+            option.dataset.start = series.start || '';
+            option.dataset.end = series.end || '';
+            option.dataset.status = series.status || '';
+            playerDocSeries.appendChild(option);
+        });
+
+        let defaultIndex = currentSeriesOptions.findIndex(series => series.status === 'current');
+        if (defaultIndex === -1) {
+            defaultIndex = currentSeriesOptions.findIndex(series => series.status === 'upcoming');
+        }
+        if (defaultIndex !== -1) {
+            playerDocSeries.value = String(defaultIndex);
+        }
+        playerDocSeriesHelper.textContent = 'Select which series this document belongs to.';
+        updateSeriesHiddenFields();
+    }
+
+    async function loadSeriesOptions(player) {
+        resetSeriesSelection();
+        if (!player) {
+            resetSeriesSelection();
+            return;
+        }
+        try {
+            playerDocSeriesHelper.textContent = 'Loading series…';
+            playerDocSeries.innerHTML = `
+                <option value="">Loading series…</option>
+                <option value="__none__" data-opponent="" data-label="No Specific Series" data-start="" data-end="">No Specific Series</option>
+            `;
+            playerDocSeries.disabled = false;
+            playerDocSeries.value = '__none__';
+            updateSeriesHiddenFields();
+            const payload = await fetchJSON(`/api/admin/player-series/${player.id}`);
+            renderSeriesOptions(payload.series || []);
+        } catch (err) {
+            resetSeriesSelection(false);
+            playerDocSeriesHelper.textContent = `Unable to load series: ${err.message} — using "No Specific Series".`;
+        }
+    }
+
+    function formatSeriesInfo(doc) {
+        const pieces = [];
+        const label = escapeHtml(doc.series_label || '');
+        const range = escapeHtml(doc.series_range_display || '');
+        const status = doc.series_status;
+
+        if (label) {
+            pieces.push(`<div class="series-label">${label}</div>`);
+        }
+        if (range) {
+            pieces.push(`<div class="series-window">${range}</div>`);
+        }
+        const allowedStatuses = ['current', 'upcoming', 'expired'];
+        const statusClass = allowedStatuses.includes(status) ? status : null;
+        if (statusClass) {
+            const statusText = statusClass === 'current' ? 'Current' : statusClass === 'upcoming' ? 'Upcoming' : 'Expired';
+            pieces.push(`<div class="series-meta"><span class="series-pill ${statusClass}">${statusText}</span></div>`);
+        }
+
+        if (!pieces.length) {
+            if (!status || status === 'none') {
+                return '<span class="subtle">No Specific Series</span>';
+            }
+            return '<span class="subtle">—</span>';
+        }
+        return `<div class="series-info">${pieces.join('')}</div>`;
+    }
+
+    async function loadPlayers() {
+        try {
+            const payload = await fetchJSON('/api/admin/users');
+            allPlayers = payload.users || [];
+            totalPlayersEl.textContent = formatCount(allPlayers.length, 'player');
+            if (!currentPlayer) {
+                totalDocsEl.textContent = formatCount(0, 'doc');
+            }
+            playerSearchHelp.textContent = allPlayers.length ? 'Select a player to load their information, upload new files, and review their history.' : 'No player accounts found yet. Ask players to register to begin managing files.';
+            renderAccountsTable(allPlayers);
+        } catch (err) {
+            allPlayers = [];
+            totalPlayersEl.textContent = formatCount(0, 'player');
+            if (!currentPlayer) {
+                totalDocsEl.textContent = formatCount(0, 'doc');
+            }
+            playerSearchHelp.textContent = `Unable to load player accounts: ${err.message}`;
+            renderAccountsTable([]);
+        }
+    }
+
+    function renderAccountsTable(players) {
+        if (!players.length) {
+            accountsTableBody.innerHTML = '<tr><td colspan="4" class="table-placeholder">No player accounts found.</td></tr>';
+            return;
+        }
+        accountsTableBody.innerHTML = players.map(player => `
+            <tr data-player-id="${player.id}">
+                <td>${player.email}</td>
+                <td>${(player.first_name || '') + ' ' + (player.last_name || '')}</td>
+                <td>${player.created_at ? new Date(player.created_at).toLocaleString() : '—'}</td>
+                <td>${player.updated_at ? new Date(player.updated_at).toLocaleString() : '—'}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderSearchResults(matches) {
+        if (!matches.length) {
+            playerSearchResults.style.display = 'none';
+            playerSearchResults.innerHTML = '';
+            return;
+        }
+        playerSearchResults.innerHTML = matches.map(player => `
+            <div class="result-item" data-player-id="${player.id}">
+                <strong>${(player.first_name || '') + ' ' + (player.last_name || '')}</strong>
+                <span>${player.email}</span>
+            </div>
+        `).join('');
+        playerSearchResults.style.display = 'block';
+    }
+
+    function updatePlayerOverview(player) {
+        const fullName = `${player.first_name || ''} ${player.last_name || ''}`.trim();
+        selectedPlayerName.textContent = fullName || player.email;
+        selectedPlayerEmail.textContent = player.email;
+        playerUploadName.textContent = fullName || player.email;
+    }
+
+    function renderPlayerDocs() {
+        if (!currentDocs.length) {
+            playerDocList.innerHTML = '<tr><td colspan="4" class="table-placeholder">No documents uploaded yet.</td></tr>';
+            if (docsCountPill) {
+                docsCountPill.textContent = '0 files';
+            }
+            return;
+        }
+        const sorted = currentDocs.slice().sort((a, b) => {
+            const aTime = a.uploaded_at ? new Date(a.uploaded_at).getTime() : 0;
+            const bTime = b.uploaded_at ? new Date(b.uploaded_at).getTime() : 0;
+            return playerDocSort.value === 'asc' ? aTime - bTime : bTime - aTime;
+        });
+        playerDocList.innerHTML = sorted.map(doc => `
+            <tr data-doc-id="${escapeHtml(doc.id)}">
+                <td>${escapeHtml(doc.filename || '—')}</td>
+                <td>${escapeHtml(doc.uploaded_at || '—')}</td>
+                <td>${formatSeriesInfo(doc)}</td>
+                <td class="actions-col">
+                    <div class="note-actions">
+                        <a href="${escapeHtml(doc.download_url)}" class="btn-secondary" target="_blank" rel="noopener">
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                        <button data-doc-action="delete" class="btn-secondary">
+                            <i class="fas fa-trash"></i> Delete
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `).join('');
+        if (docsCountPill) {
+            docsCountPill.textContent = sorted.length + ' ' + (sorted.length === 1 ? 'file' : 'files');
+        }
+    }
+
+    function renderDocumentLog(showAllOverride) {
+        const showAll = typeof showAllOverride === 'boolean' ? showAllOverride : showingAllActivity;
+        showingAllActivity = showAll;
+
+        if (!currentLogEntries.length) {
+            playerDocLogList.innerHTML = '<li class="table-placeholder">No activity yet.</li>';
+            if (playerDocLogShowAll) {
+                playerDocLogShowAll.style.display = 'none';
+            }
+            return;
+        }
+
+        const visibleEntries = showAll ? currentLogEntries : currentLogEntries.slice(0, ACTIVITY_LOG_PAGE_SIZE);
+
+        playerDocLogList.innerHTML = visibleEntries.map(entry => {
+            const actionMap = {
+                upload: 'Uploaded',
+                delete: 'Deleted',
+                auto_delete_series: 'Series auto-deleted',
+            };
+            const actionLabel = actionMap[entry.action] || entry.action;
+            return `
+            <li>
+                <span class="player-doc-log-action">${escapeHtml(actionLabel)} ${escapeHtml(entry.filename)}</span>
+                <span class="player-doc-log-meta">${escapeHtml(entry.timestamp_human || '—')}</span>
+            </li>
+        `;
+        }).join('');
+
+        if (!playerDocLogShowAll) {
+            return;
+        }
+
+        const hasMore = currentLogEntries.length > ACTIVITY_LOG_PAGE_SIZE;
+        if (!hasMore) {
+            playerDocLogShowAll.style.display = 'none';
+            playerDocLogShowAll.dataset.toggleState = 'collapsed';
+            return;
+        }
+
+        playerDocLogShowAll.style.display = 'inline-flex';
+        if (playerDocLogShowAllLabel) {
+            if (showAll) {
+                playerDocLogShowAllLabel.textContent = 'Show less';
+            } else {
+                const remaining = Math.max(currentLogEntries.length - visibleEntries.length, 0);
+                playerDocLogShowAllLabel.textContent = remaining ? `Show all (${remaining} more)` : 'Show all';
+            }
+        }
+        playerDocLogShowAll.dataset.toggleState = showAll ? 'expanded' : 'collapsed';
+    }
+
+    async function loadPlayerData(player) {
+        currentPlayer = player;
+        updatePlayerOverview(player);
+        playerSearchHelp.textContent = `Managing documents for ${player.email}`;
+        playerDocStatus.textContent = 'Loading documents…';
+        playerDocForm.reset();
+        uploadSlotText.innerHTML = defaultUploadText;
+        resetSeriesSelection();
+        playerDocList.innerHTML = '<tr><td colspan="4" class="table-placeholder">Loading…</td></tr>';
+        playerDocLogList.innerHTML = '<li class="table-placeholder">Loading…</li>';
+        showingAllActivity = false;
+        if (playerDocLogShowAll) {
+            playerDocLogShowAll.style.display = 'none';
+            playerDocLogShowAll.dataset.toggleState = 'collapsed';
+            if (playerDocLogShowAllLabel) {
+                playerDocLogShowAllLabel.textContent = 'Show all';
+            }
+        }
+
+        try {
+            const payload = await fetchJSON(`/api/admin/player-docs/${player.id}`);
+            currentDocs = payload.documents || [];
+            playerDocStatus.textContent = `${currentDocs.length} document${currentDocs.length === 1 ? '' : 's'} found`;
+            totalDocsEl.textContent = formatCount(currentDocs.length, 'doc');
+            renderPlayerDocs();
+        } catch (err) {
+            currentDocs = [];
+            playerDocStatus.textContent = `Failed to load documents: ${err.message}`;
+            totalDocsEl.textContent = formatCount(0, 'doc');
+            renderPlayerDocs();
+        }
+
+        try {
+            const logPayload = await fetchJSON(`/api/admin/player-docs/logs?player_id=${player.id}`);
+            currentLogEntries = logPayload.events || [];
+            renderDocumentLog(false);
+        } catch (err) {
+            currentLogEntries = [];
+            playerDocLogList.innerHTML = `<li class="table-placeholder">Could not load activity: ${err.message}</li>`;
+            if (playerDocLogShowAll) {
+                playerDocLogShowAll.style.display = 'none';
+                playerDocLogShowAll.dataset.toggleState = 'collapsed';
+            }
+        }
+
+        await loadSeriesOptions(player);
+    }
+
+    playerSearchInput.addEventListener('input', () => {
+        const value = playerSearchInput.value.trim().toLowerCase();
+        if (!value) {
+            renderSearchResults([]);
+            return;
+        }
+        const matches = allPlayers.filter(player => {
+            const name = `${player.first_name || ''} ${player.last_name || ''}`.toLowerCase();
+            return player.email.toLowerCase().includes(value) || name.includes(value);
+        }).slice(0, 10);
+        renderSearchResults(matches);
+    });
+
+    playerSearchResults.addEventListener('click', (event) => {
+        const item = event.target.closest('.result-item');
+        if (!item) return;
+        const playerId = Number(item.dataset.playerId);
+        const player = allPlayers.find(p => p.id === playerId);
+        if (player) {
+            playerSearchInput.value = '';
+            playerSearchResults.style.display = 'none';
+            loadPlayerData(player);
+        }
+    });
+
+    document.addEventListener('click', (event) => {
+        if (!playerSearchResults.contains(event.target) && event.target !== playerSearchInput) {
+            playerSearchResults.style.display = 'none';
+        }
+    });
+
+    playerDocForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (!currentPlayer) {
+            alert('Select a player first.');
+            return;
+        }
+        if (!playerDocFile.files.length) {
+            alert('Choose a document to upload.');
+            return;
+        }
+        if (playerDocSeries.disabled || !playerDocSeries.value) {
+            alert('Select a series for this document.');
+            return;
+        }
+        if (playerDocSeries.value !== '__none__' && (!playerDocSeriesOpponent.value || !playerDocSeriesStart.value || !playerDocSeriesEnd.value)) {
+            alert('Series details are missing. Please re-select the series.');
+            return;
+        }
+        const formData = new FormData(playerDocForm);
+        formData.append('player_id', currentPlayer.id);
+
+        try {
+            uploadDocBtn.disabled = true;
+            uploadDocBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Uploading…</span>';
+            const response = await fetch('/api/admin/player-docs', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin'
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error || 'Upload failed');
+            }
+            playerDocForm.reset();
+            uploadSlotText.innerHTML = defaultUploadText;
+            if (!playerDocSeries.disabled) {
+                updateSeriesHiddenFields();
+            }
+            await loadPlayerData(currentPlayer);
+        } catch (err) {
+            alert(`Failed to upload document: ${err.message}`);
+        } finally {
+            uploadDocBtn.disabled = false;
+            uploadDocBtn.innerHTML = '<i class="fas fa-upload"></i><span>Upload</span>';
+        }
+    });
+
+    resetDocBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        playerDocForm.reset();
+        uploadSlotText.innerHTML = defaultUploadText;
+        if (!playerDocSeries.disabled) {
+            playerDocSeries.value = '';
+            updateSeriesHiddenFields();
+        }
+    });
+    playerDocFile.addEventListener('change', () => {
+        if (playerDocFile.files && playerDocFile.files.length) {
+            const [file] = playerDocFile.files;
+            uploadSlotText.textContent = file.name;
+        } else {
+            uploadSlotText.innerHTML = defaultUploadText;
+        }
+    });
+    playerDocSeries.addEventListener('change', updateSeriesHiddenFields);
+
+    playerDocSort.addEventListener('change', () => {
+        renderPlayerDocs();
+    });
+
+    playerDocList.addEventListener('click', async (event) => {
+        const button = event.target.closest('[data-doc-action]');
+        if (!button || !currentPlayer) return;
+        if (button.dataset.docAction === 'delete') {
+            const row = button.closest('tr');
+            const docId = row?.dataset?.docId;
+            if (!docId) return;
+            if (!confirm('Delete this document? This cannot be undone.')) {
+                return;
+            }
+            try {
+                button.disabled = true;
+                const response = await fetch(`/api/admin/player-docs/${docId}`, {
+                    method: 'DELETE',
+                    credentials: 'same-origin'
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.error || 'Delete failed');
+                }
+                await loadPlayerData(currentPlayer);
+            } catch (err) {
+                alert(`Failed to delete document: ${err.message}`);
+            } finally {
+                button.disabled = false;
+            }
+        }
+    });
+
+    if (playerDocLogShowAll) {
+        playerDocLogShowAll.addEventListener('click', () => {
+            const nextState = playerDocLogShowAll.dataset.toggleState === 'expanded' ? false : true;
+            renderDocumentLog(nextState);
+        });
+    }
+
+    tabButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            if (btn.dataset.tab === 'documents') {
+                documentsTab.style.display = '';
+                activityTab.style.display = 'none';
+            } else {
+                documentsTab.style.display = 'none';
+                activityTab.style.display = '';
+            }
+        });
+    });
+
+    accountsTableBody.addEventListener('click', (event) => {
+        const row = event.target.closest('tr[data-player-id]');
+        if (!row) return;
+        const playerId = Number(row.dataset.playerId);
+        const player = allPlayers.find(p => p.id === playerId);
+        if (player) {
+            loadPlayerData(player);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    });
+
+    accountsSearch.addEventListener('input', () => {
+        const value = accountsSearch.value.trim().toLowerCase();
+        const filtered = allPlayers.filter(player => {
+            const name = `${player.first_name || ''} ${player.last_name || ''}`.toLowerCase();
+            return player.email.toLowerCase().includes(value) || name.includes(value);
+        });
+        renderAccountsTable(filtered);
+    });
+
+    refreshPlayersBtn.addEventListener('click', () => {
+        loadPlayers();
+    });
+
+    resetSeriesSelection();
+    loadPlayers();
+})();
+</script>
+{% endblock %}
+
+

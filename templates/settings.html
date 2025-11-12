@@ -1,0 +1,601 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container settings-page">
+    <header class="section-hero">
+        <div class="section-hero-heading">
+            <h1 class="hero-content">Settings</h1>
+        </div>
+    </header>
+
+    <div class="content-wrapper">
+        <div class="settings-toolbar">
+            <div class="settings-status status-saving" id="settingsStatus">
+                <span class="status-indicator status-saving"></span>
+                <span class="status-text">Loading settings…</span>
+            </div>
+            <div class="settings-actions">
+                <button type="button" class="settings-btn settings-btn-secondary" id="resetSettings">
+                    <i class="fas fa-rotate-left"></i>
+                    <span>Reset to Defaults</span>
+                </button>
+                <button type="button" class="settings-btn settings-btn-primary" id="saveSettings" disabled>
+                    <i class="fas fa-save"></i>
+                    <span>Save Changes</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="settings-container">
+            <section class="settings-card" data-section="general">
+                <div class="settings-card-header">
+                    <div>
+                        <h2>General Preferences</h2>
+                        <p>Customize how the application behaves when it loads.</p>
+                    </div>
+                    <span class="settings-section-badge">General</span>
+                </div>
+                <div class="settings-list">
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Theme</h3>
+                            <p>Select the default UI theme.</p>
+                        </div>
+                        <div class="setting-control">
+                            <select id="general_theme" class="setting-select" data-setting-field>
+                                <option value="dark">Dark</option>
+                                <option value="light">Light</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Auto Collapse Sidebar</h3>
+                            <p>Start the app in compact navigation mode.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="general_auto_collapse_sidebar" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Show Beta Features</h3>
+                            <p>Expose experimental UI elements still in testing.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="general_show_beta_features" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Automatic Update Checks</h3>
+                            <p>Notify when new datasets or app updates are available.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="general_auto_check_updates" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-card" data-section="reports">
+                <div class="settings-card-header">
+                    <div>
+                        <h2>Report Defaults</h2>
+                        <p>Control default inputs used by hitter and pitcher reports.</p>
+                    </div>
+                    <span class="settings-section-badge">Reports</span>
+                </div>
+                <div class="settings-list">
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Default Hitter Team</h3>
+                            <p>Used when a hitter team is not specified (AUTO to autodetect).</p>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" id="report_default_team" class="setting-input" placeholder="AUTO" autocomplete="off" data-setting-field>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Default Pitcher Team</h3>
+                            <p>Used when a pitcher team is not provided.</p>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" id="report_default_pitcher_team" class="setting-input" placeholder="AUTO" autocomplete="off" data-setting-field>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Default Opponent</h3>
+                            <p>Optional fallback opponent abbreviation.</p>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" id="report_default_opponent" class="setting-input" placeholder="e.g., NYY" autocomplete="off" data-setting-field>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Season Start Date</h3>
+                            <p>Default date for rolling metrics and filters.</p>
+                        </div>
+                        <div class="setting-control">
+                            <input type="date" id="report_default_season_start" class="setting-input" data-setting-field>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Use Next Series by Default</h3>
+                            <p>Prefill reports to target the upcoming series instead of the next game.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="report_use_next_series" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Auto Open Downloads</h3>
+                            <p>Reveal the downloads folder when a report is ready.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="report_auto_open_downloads" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Export Format</h3>
+                            <p>Choose the default report export format.</p>
+                        </div>
+                        <div class="setting-control">
+                            <select id="report_default_export_format" class="setting-select" data-setting-field>
+                                <option value="pdf">PDF</option>
+                                <option value="zip">ZIP (assets only)</option>
+                                <option value="pdf+zip">PDF + ZIP</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-card" data-section="data">
+                <div class="settings-card-header">
+                    <div>
+                        <h2>Data Sources</h2>
+                        <p>Configure local directories and caching behaviour.</p>
+                    </div>
+                    <span class="settings-section-badge">Data</span>
+                </div>
+                <div class="settings-list">
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Data Directory</h3>
+                            <p>Where cached and downloaded data is stored.</p>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" id="data_directory" class="setting-input" placeholder="/path/to/data" autocomplete="off" data-setting-field>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Use Local Cache</h3>
+                            <p>Reuse cached datasets when possible.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="data_use_local_cache" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Auto Refresh on Startup</h3>
+                            <p>Refresh critical datasets whenever the app launches.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="data_auto_refresh_on_startup" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Allow Unverified Sources</h3>
+                            <p>Permit data ingestion from experimental feeds.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch warning">
+                                <input type="checkbox" id="data_allow_unverified_sources" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-card" data-section="integrations">
+                <div class="settings-card-header">
+                    <div>
+                        <h2>Integrations & API Keys</h2>
+                        <p>Values are stored locally and never transmitted externally.</p>
+                    </div>
+                    <span class="settings-section-badge">Integrations</span>
+                </div>
+                <div class="settings-list">
+                    <div class="setting-row multiline">
+                        <div class="setting-info">
+                            <h3>Sportradar API Key</h3>
+                            <p>Used for live pitch tracking integrations.</p>
+                        </div>
+                        <div class="setting-control">
+                            <textarea id="integration_sportradar_api_key" class="setting-textarea" rows="2" data-setting-field autocomplete="off" spellcheck="false"></textarea>
+                        </div>
+                    </div>
+                    <div class="setting-row multiline">
+                        <div class="setting-info">
+                            <h3>Statcast Cookie</h3>
+                            <p>Paste the MLBAM <code>session</code> cookie for authenticated requests.</p>
+                        </div>
+                        <div class="setting-control">
+                            <textarea id="integration_statcast_cookie" class="setting-textarea" rows="2" data-setting-field autocomplete="off" spellcheck="false"></textarea>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Fangraphs Username</h3>
+                            <p>Credentials for premium Fangraphs access.</p>
+                        </div>
+                        <div class="setting-control">
+                            <input type="text" id="integration_fangraphs_username" class="setting-input" autocomplete="username" data-setting-field>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Fangraphs Password</h3>
+                            <p>Saved locally for authenticated requests.</p>
+                        </div>
+                        <div class="setting-control">
+                            <input type="password" id="integration_fangraphs_password" class="setting-input" autocomplete="current-password" data-setting-field>
+                        </div>
+                    </div>
+                    <div class="setting-row multiline">
+                        <div class="setting-info">
+                            <h3>TruMedia Token</h3>
+                            <p>Optional token for advanced matchup feeds.</p>
+                        </div>
+                        <div class="setting-control">
+                            <textarea id="integration_trumedia_token" class="setting-textarea" rows="2" data-setting-field autocomplete="off" spellcheck="false"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="settings-card" data-section="notifications">
+                <div class="settings-card-header">
+                    <div>
+                        <h2>Notifications</h2>
+                        <p>Choose how you receive alerts about completed jobs.</p>
+                    </div>
+                    <span class="settings-section-badge">Notifications</span>
+                </div>
+                <div class="settings-list">
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Email Notifications</h3>
+                            <p>Send mail when reports complete or fail.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="notification_enable_email" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Notification Email Address</h3>
+                            <p>Destination for completion summaries.</p>
+                        </div>
+                        <div class="setting-control">
+                            <input type="email" id="notification_email_address" class="setting-input" placeholder="name@team.com" autocomplete="email" data-setting-field>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Notify on Completion</h3>
+                            <p>Send an alert when all reports finish successfully.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="notification_notify_on_completion" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="setting-row">
+                        <div class="setting-info">
+                            <h3>Notify on Failure</h3>
+                            <p>Send an alert if a report encounters an error.</p>
+                        </div>
+                        <div class="setting-control">
+                            <label class="switch">
+                                <input type="checkbox" id="notification_notify_on_failure" data-setting-field>
+                                <span class="slider"></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const statusEl = document.getElementById('settingsStatus');
+        const statusIndicator = statusEl.querySelector('.status-indicator');
+        const statusText = statusEl.querySelector('.status-text');
+        const saveBtn = document.getElementById('saveSettings');
+        const resetBtn = document.getElementById('resetSettings');
+        const fields = document.querySelectorAll('[data-setting-field]');
+        const emailToggle = document.getElementById('notification_enable_email');
+        const emailField = document.getElementById('notification_email_address');
+
+        let isSaving = false;
+        let hasUnsavedChanges = false;
+
+        function setStatus(state, message) {
+            const states = ['synced', 'dirty', 'saving', 'error'];
+            states.forEach(s => statusEl.classList.remove(`status-${s}`));
+            statusEl.classList.add(`status-${state}`);
+            statusIndicator.className = `status-indicator status-${state}`;
+            statusText.textContent = message;
+        }
+
+        function markDirty() {
+            if (isSaving) {
+                return;
+            }
+            hasUnsavedChanges = true;
+            saveBtn.disabled = false;
+            setStatus('dirty', 'Unsaved changes');
+        }
+
+        function updateEmailFieldState() {
+            if (!emailToggle || !emailField) return;
+            if (emailToggle.checked) {
+                emailField.disabled = false;
+            } else {
+                emailField.disabled = true;
+            }
+        }
+
+        function applyThemePreference(themeValue) {
+            if (!themeValue) {
+                return;
+            }
+            document.body.dataset.theme = themeValue;
+        }
+
+        function populateForm(data) {
+            const general = (data && data.general) || {};
+            const reports = (data && data.reports) || {};
+            const sources = (data && data.data_sources) || {};
+            const integrations = (data && data.integrations) || {};
+            const notifications = (data && data.notifications) || {};
+
+            const themeSelect = document.getElementById('general_theme');
+            const themeValue = general.theme || 'dark';
+            const runtimeTheme = document.body.dataset.theme;
+            if (runtimeTheme) {
+                themeSelect.value = runtimeTheme;
+            } else {
+                themeSelect.value = themeValue;
+                applyThemePreference(themeValue);
+            }
+            themeSelect.dispatchEvent(new Event('custom-select:sync'));
+            document.getElementById('general_auto_collapse_sidebar').checked = !!general.auto_collapse_sidebar;
+            document.getElementById('general_show_beta_features').checked = !!general.show_beta_features;
+            document.getElementById('general_auto_check_updates').checked = !!general.auto_check_updates;
+
+            document.getElementById('report_default_team').value = reports.default_team || 'AUTO';
+            document.getElementById('report_default_pitcher_team').value = reports.default_pitcher_team || '';
+            document.getElementById('report_default_opponent').value = reports.default_opponent || '';
+            document.getElementById('report_default_season_start').value = reports.default_season_start || '';
+            document.getElementById('report_use_next_series').checked = !!reports.use_next_series;
+            document.getElementById('report_auto_open_downloads').checked = !!reports.auto_open_downloads;
+            document.getElementById('report_default_export_format').value = reports.default_export_format || 'pdf';
+
+            document.getElementById('data_directory').value = sources.data_directory || '';
+            document.getElementById('data_use_local_cache').checked = sources.use_local_cache !== false;
+            document.getElementById('data_auto_refresh_on_startup').checked = !!sources.auto_refresh_on_startup;
+            document.getElementById('data_allow_unverified_sources').checked = !!sources.allow_unverified_sources;
+
+            document.getElementById('integration_sportradar_api_key').value = integrations.sportradar_api_key || '';
+            document.getElementById('integration_statcast_cookie').value = integrations.statcast_cookie || '';
+            document.getElementById('integration_fangraphs_username').value = integrations.fangraphs_username || '';
+            document.getElementById('integration_fangraphs_password').value = integrations.fangraphs_password || '';
+            document.getElementById('integration_trumedia_token').value = integrations.trumedia_token || '';
+
+            document.getElementById('notification_enable_email').checked = !!notifications.enable_email;
+            document.getElementById('notification_email_address').value = notifications.email_address || '';
+            document.getElementById('notification_notify_on_completion').checked = notifications.notify_on_completion !== false;
+            document.getElementById('notification_notify_on_failure').checked = notifications.notify_on_failure !== false;
+
+            updateEmailFieldState();
+            hasUnsavedChanges = false;
+            saveBtn.disabled = true;
+            setStatus('synced', 'All changes saved');
+        }
+
+        function collectForm() {
+            const payload = {
+                general: {
+                    theme: document.getElementById('general_theme').value || 'dark',
+                    auto_collapse_sidebar: document.getElementById('general_auto_collapse_sidebar').checked,
+                    show_beta_features: document.getElementById('general_show_beta_features').checked,
+                    auto_check_updates: document.getElementById('general_auto_check_updates').checked,
+                },
+                reports: {
+                    default_team: (document.getElementById('report_default_team').value || '').trim().toUpperCase() || 'AUTO',
+                    default_pitcher_team: (document.getElementById('report_default_pitcher_team').value || '').trim().toUpperCase(),
+                    default_opponent: (document.getElementById('report_default_opponent').value || '').trim().toUpperCase(),
+                    default_season_start: document.getElementById('report_default_season_start').value || '',
+                    use_next_series: document.getElementById('report_use_next_series').checked,
+                    auto_open_downloads: document.getElementById('report_auto_open_downloads').checked,
+                    default_export_format: document.getElementById('report_default_export_format').value || 'pdf',
+                },
+                data_sources: {
+                    data_directory: (document.getElementById('data_directory').value || '').trim(),
+                    use_local_cache: document.getElementById('data_use_local_cache').checked,
+                    auto_refresh_on_startup: document.getElementById('data_auto_refresh_on_startup').checked,
+                    allow_unverified_sources: document.getElementById('data_allow_unverified_sources').checked,
+                },
+                integrations: {
+                    sportradar_api_key: document.getElementById('integration_sportradar_api_key').value.trim(),
+                    statcast_cookie: document.getElementById('integration_statcast_cookie').value.trim(),
+                    fangraphs_username: document.getElementById('integration_fangraphs_username').value.trim(),
+                    fangraphs_password: document.getElementById('integration_fangraphs_password').value,
+                    trumedia_token: document.getElementById('integration_trumedia_token').value.trim(),
+                },
+                notifications: {
+                    enable_email: document.getElementById('notification_enable_email').checked,
+                    email_address: (document.getElementById('notification_email_address').value || '').trim(),
+                    notify_on_completion: document.getElementById('notification_notify_on_completion').checked,
+                    notify_on_failure: document.getElementById('notification_notify_on_failure').checked,
+                },
+            };
+
+            if (!payload.notifications.enable_email) {
+                payload.notifications.email_address = '';
+            }
+
+            return payload;
+        }
+
+        async function loadSettings() {
+            setStatus('saving', 'Loading settings…');
+            saveBtn.disabled = true;
+            resetBtn.disabled = true;
+            try {
+                const response = await fetch('/api/settings');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const data = await response.json();
+                populateForm(data);
+            } catch (error) {
+                console.error('Failed to load settings:', error);
+                setStatus('error', 'Failed to load settings');
+            } finally {
+                resetBtn.disabled = false;
+            }
+        }
+
+        async function saveSettingsHandler() {
+            if (isSaving) return;
+            const payload = collectForm();
+            isSaving = true;
+            setStatus('saving', 'Saving changes…');
+            saveBtn.disabled = true;
+            resetBtn.disabled = true;
+            try {
+                const response = await fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.error || `Save failed (HTTP ${response.status})`);
+                }
+                const data = await response.json();
+                populateForm(data);
+            } catch (error) {
+                console.error('Failed to save settings:', error);
+                setStatus('error', error.message || 'Failed to save settings');
+                saveBtn.disabled = false;
+            } finally {
+                isSaving = false;
+                resetBtn.disabled = false;
+            }
+        }
+
+        async function resetSettingsHandler() {
+            if (isSaving) return;
+            if (!confirm('Reset all settings to their default values?')) {
+                return;
+            }
+            isSaving = true;
+            setStatus('saving', 'Resetting settings…');
+            saveBtn.disabled = true;
+            resetBtn.disabled = true;
+            try {
+                const response = await fetch('/api/settings', { method: 'DELETE' });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.error || `Reset failed (HTTP ${response.status})`);
+                }
+                const data = await response.json();
+                populateForm(data);
+            } catch (error) {
+                console.error('Failed to reset settings:', error);
+                setStatus('error', error.message || 'Failed to reset settings');
+                saveBtn.disabled = false;
+            } finally {
+                isSaving = false;
+                resetBtn.disabled = false;
+            }
+        }
+
+        fields.forEach(field => {
+            field.addEventListener('change', () => {
+                if (field === emailToggle) {
+                    updateEmailFieldState();
+                }
+                if (field.id === 'general_theme') {
+                    applyThemePreference(field.value || 'dark');
+                }
+                markDirty();
+            });
+            field.addEventListener('input', () => {
+                if (field === emailToggle) {
+                    updateEmailFieldState();
+                }
+                if (field === emailField && emailField.disabled) {
+                    return;
+                }
+                if (field.id === 'general_theme') {
+                    applyThemePreference(field.value || 'dark');
+                }
+                markDirty();
+            });
+        });
+
+        saveBtn.addEventListener('click', saveSettingsHandler);
+        resetBtn.addEventListener('click', resetSettingsHandler);
+
+        loadSettings();
+    });
+</script>
+{% endblock %}

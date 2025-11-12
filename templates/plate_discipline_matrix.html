@@ -1,0 +1,950 @@
+{% extends "base.html" %}
+
+{% block title %}Plate Discipline Matrix - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Plate Discipline Matrix</h1>
+                <p class="page-subtitle">Visual matrix comparing swing rates, chase rates, and contact rates across different pitch types and locations to assess plate discipline</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="pitchmix-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Batter Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="batterSearch" 
+                        class="control-input" 
+                        placeholder="Type to search batters..."
+                        autocomplete="off"
+                    >
+                    <div id="batterSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedBatterDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedBatterName"></span>
+                    <button id="clearBatter" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <button id="generateAnalysis" class="generate-btn" type="button">
+                <i class="fas fa-th-large"></i> Generate Matrix
+            </button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading plate discipline data...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error-message" style="display: none;">
+            <i class="fas fa-exclamation-circle"></i>
+            <span id="errorText"></span>
+        </div>
+
+        <!-- Main Analysis Content -->
+        <div id="analysisContent" class="analysis-content" style="display: none;">
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <h2 id="batterTitle"></h2>
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Pitches</div>
+                        <div class="stat-value" id="totalPitches">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Batter Hand</div>
+                        <div class="stat-value" id="batterHand">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Season</div>
+                        <div class="stat-value" id="seasonDisplay">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metric Selector -->
+            <div class="metric-selector-section">
+                <h3>Select Metric to Display</h3>
+                <div class="metric-selector-row">
+                    <label>Primary Metric:</label>
+                    <select id="metricSelect" class="metric-select">
+                        <option value="swing_rate">Swing Rate</option>
+                        <option value="chase_rate">Chase Rate</option>
+                        <option value="contact_rate">Contact Rate</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Matrix Visualization -->
+            <div class="matrix-section">
+                <h3 id="matrixTitle">Plate Discipline Matrix</h3>
+                <div id="matrixContainer" class="matrix-container"></div>
+            </div>
+
+            <!-- Summary Charts -->
+            <div class="charts-section">
+                <div class="chart-row">
+                    <div class="chart-container">
+                        <h3>Swing Rates by Pitch Type</h3>
+                        <canvas id="swingRateChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Chase Rates by Pitch Type</h3>
+                        <canvas id="chaseRateChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-container">
+                        <h3>Contact Rates by Pitch Type</h3>
+                        <canvas id="contactRateChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h3>Zone vs Out of Zone Comparison</h3>
+                        <canvas id="zoneComparisonChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Pitch type labels
+const PITCH_LABELS = {
+    'FF': '4-Seam Fastball',
+    'SI': 'Sinker',
+    'SL': 'Slider',
+    'CH': 'Changeup',
+    'CU': 'Curveball',
+    'KC': 'Knuckle Curve',
+    'FC': 'Cutter',
+    'FS': 'Splitter',
+    'FT': '2-Seam Fastball',
+    'ST': 'Sweeper',
+    'SV': 'Slurve',
+    'KN': 'Knuckleball'
+};
+
+// Player search functionality
+let selectedBatter = null;
+let currentData = null;
+let charts = {};
+
+// Setup batter search functionality
+function setupBatterSearch() {
+    const batterSearchInput = document.getElementById('batterSearch');
+    const batterSearchDropdown = document.getElementById('batterSearchDropdown');
+    const selectedBatterDisplay = document.getElementById('selectedBatterDisplay');
+    const selectedBatterName = document.getElementById('selectedBatterName');
+    const clearBatterBtn = document.getElementById('clearBatter');
+    
+    let searchTimeout;
+
+    batterSearchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            batterSearchDropdown.style.display = 'none';
+            return;
+        }
+
+        searchTimeout = setTimeout(async () => {
+            try {
+                const response = await fetch(`/api/csv/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.players && data.players.length > 0) {
+                    batterSearchDropdown.innerHTML = '';
+                    data.players.slice(0, 10).forEach(player => {
+                        const item = document.createElement('div');
+                        item.className = 'dropdown-item';
+                        item.textContent = player.name || player;
+                        item.addEventListener('click', function() {
+                            selectBatter(player.name || player);
+                            batterSearchDropdown.style.display = 'none';
+                            batterSearchInput.value = '';
+                        });
+                        batterSearchDropdown.appendChild(item);
+                    });
+                    batterSearchDropdown.style.display = 'block';
+                } else {
+                    batterSearchDropdown.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error searching batters:', error);
+            }
+        }, 300);
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!batterSearchInput.contains(e.target) && !batterSearchDropdown.contains(e.target)) {
+            batterSearchDropdown.style.display = 'none';
+        }
+    });
+    
+    function selectBatter(name) {
+        selectedBatter = name;
+        batterSearchInput.value = '';
+        batterSearchInput.blur();
+        batterSearchDropdown.style.display = 'none';
+        batterSearchDropdown.innerHTML = '';
+        selectedBatterName.textContent = name;
+        selectedBatterDisplay.style.display = 'flex';
+    }
+
+    clearBatterBtn.addEventListener('click', function() {
+        selectedBatter = null;
+        selectedBatterDisplay.style.display = 'none';
+        document.getElementById('analysisContent').style.display = 'none';
+    });
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    setupBatterSearch();
+    
+    // Season dropdown
+    const seasonSelect = document.getElementById('seasonSelect');
+    const currentYear = new Date().getFullYear();
+    for (let year = currentYear; year >= 2008; year--) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        seasonSelect.appendChild(option);
+    }
+
+    // Generate analysis
+    document.getElementById('generateAnalysis').addEventListener('click', async function() {
+        if (!selectedBatter) {
+            alert('Please select a batter');
+            return;
+        }
+
+        const season = seasonSelect.value;
+        await loadPlateDisciplineData(selectedBatter, season);
+    });
+    
+    // Update matrix when metric changes
+    document.getElementById('metricSelect').addEventListener('change', function() {
+        if (currentData) {
+            createMatrix(currentData);
+        }
+    });
+});
+
+// Load data from API
+async function loadPlateDisciplineData(batterName, season) {
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    const analysisContent = document.getElementById('analysisContent');
+    const errorText = document.getElementById('errorText');
+
+    loadingIndicator.style.display = 'block';
+    errorMessage.style.display = 'none';
+    analysisContent.style.display = 'none';
+
+    try {
+        let url = `/api/visuals/plate-discipline-matrix?batter=${encodeURIComponent(batterName)}`;
+        if (season) {
+            url += `&season=${season}`;
+        }
+
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.error) {
+            errorText.textContent = data.error;
+            errorMessage.style.display = 'block';
+            loadingIndicator.style.display = 'none';
+            return;
+        }
+
+        currentData = data;
+        displayPlateDisciplineData(data);
+        loadingIndicator.style.display = 'none';
+        analysisContent.style.display = 'block';
+    } catch (error) {
+        errorText.textContent = `Error loading data: ${error.message}`;
+        errorMessage.style.display = 'block';
+        loadingIndicator.style.display = 'none';
+    }
+}
+
+// Display data
+function displayPlateDisciplineData(data) {
+    // Update summary
+    document.getElementById('batterTitle').textContent = data.batter;
+    document.getElementById('totalPitches').textContent = data.total_pitches.toLocaleString();
+    document.getElementById('batterHand').textContent = data.batter_hand;
+    document.getElementById('seasonDisplay').textContent = data.season || 'All Seasons';
+
+    // Create matrix
+    createMatrix(data);
+
+    // Create charts
+    createCharts(data);
+}
+
+// Create matrix visualization
+function createMatrix(data) {
+    const container = document.getElementById('matrixContainer');
+    const metricSelect = document.getElementById('metricSelect');
+    const matrixTitle = document.getElementById('matrixTitle');
+    
+    const selectedMetric = metricSelect.value;
+    const metricLabels = {
+        'swing_rate': 'Swing Rate (%)',
+        'chase_rate': 'Chase Rate (%)',
+        'contact_rate': 'Contact Rate (%)'
+    };
+    
+    matrixTitle.textContent = `Plate Discipline Matrix - ${metricLabels[selectedMetric]}`;
+
+    // Organize data by pitch type and location
+    const matrixMap = {};
+    data.matrix.forEach(item => {
+        if (!matrixMap[item.pitch_type]) {
+            matrixMap[item.pitch_type] = {};
+        }
+        matrixMap[item.pitch_type][item.location] = item;
+    });
+
+    const pitchTypes = data.pitch_types || Object.keys(matrixMap);
+    const locations = ['In Zone', 'Out of Zone'];
+
+    // Create table structure
+    let html = '<table class="discipline-matrix-table">';
+    
+    // Header row
+    html += '<thead><tr><th>Pitch Type</th>';
+    locations.forEach(loc => {
+        html += `<th>${loc}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+
+    // Data rows
+    pitchTypes.forEach(pitchType => {
+        const label = PITCH_LABELS[pitchType] || pitchType;
+        html += `<tr><td class="pitch-type-label">${label}</td>`;
+        
+        locations.forEach(loc => {
+            const cellData = matrixMap[pitchType]?.[loc];
+            if (cellData && cellData.total_pitches > 0) {
+                const value = cellData[selectedMetric];
+                const displayValue = value !== null && value !== undefined ? value.toFixed(1) : 'N/A';
+                const totalPitches = cellData.total_pitches;
+                
+                // Color coding based on metric
+                let colorClass = '';
+                if (selectedMetric === 'swing_rate') {
+                    colorClass = value > 50 ? 'high' : value > 30 ? 'medium' : 'low';
+                } else if (selectedMetric === 'chase_rate') {
+                    colorClass = value > 30 ? 'high-chase' : value > 15 ? 'medium-chase' : 'low-chase';
+                } else if (selectedMetric === 'contact_rate') {
+                    colorClass = value > 80 ? 'high-contact' : value > 60 ? 'medium-contact' : 'low-contact';
+                }
+                
+                html += `<td class="matrix-cell ${colorClass}" data-tooltip="${label} - ${loc}: ${displayValue}% (${totalPitches} pitches)">
+                    <div class="matrix-value">${displayValue}%</div>
+                    <div class="matrix-count">${totalPitches}</div>
+                </td>`;
+            } else {
+                html += '<td class="matrix-cell empty">-</td>';
+            }
+        });
+        
+        html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// Create charts
+function createCharts(data) {
+    // Organize data by pitch type
+    const pitchData = {};
+    data.matrix.forEach(item => {
+        if (!pitchData[item.pitch_type]) {
+            pitchData[item.pitch_type] = {
+                inZone: {},
+                outZone: {}
+            };
+        }
+        if (item.location === 'In Zone') {
+            pitchData[item.pitch_type].inZone = item;
+        } else {
+            pitchData[item.pitch_type].outZone = item;
+        }
+    });
+
+    const pitchTypes = Object.keys(pitchData);
+    const labels = pitchTypes.map(pt => PITCH_LABELS[pt] || pt);
+
+    // Swing Rate Chart
+    if (charts.swingRate) charts.swingRate.destroy();
+    const swingCtx = document.getElementById('swingRateChart').getContext('2d');
+    charts.swingRate = new Chart(swingCtx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'In Zone',
+                data: pitchTypes.map(pt => pitchData[pt].inZone.swing_rate || 0),
+                backgroundColor: 'rgba(54, 162, 235, 0.6)'
+            }, {
+                label: 'Out of Zone',
+                data: pitchTypes.map(pt => pitchData[pt].outZone.swing_rate || 0),
+                backgroundColor: 'rgba(255, 99, 132, 0.6)'
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true, max: 100 }
+            }
+        }
+    });
+
+    // Chase Rate Chart
+    if (charts.chaseRate) charts.chaseRate.destroy();
+    const chaseCtx = document.getElementById('chaseRateChart').getContext('2d');
+    charts.chaseRate = new Chart(chaseCtx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Chase Rate',
+                data: pitchTypes.map(pt => pitchData[pt].outZone.chase_rate || 0),
+                backgroundColor: 'rgba(255, 159, 64, 0.6)'
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true, max: 100 }
+            }
+        }
+    });
+
+    // Contact Rate Chart
+    if (charts.contactRate) charts.contactRate.destroy();
+    const contactCtx = document.getElementById('contactRateChart').getContext('2d');
+    charts.contactRate = new Chart(contactCtx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'In Zone',
+                data: pitchTypes.map(pt => pitchData[pt].inZone.contact_rate || 0),
+                backgroundColor: 'rgba(75, 192, 192, 0.6)'
+            }, {
+                label: 'Out of Zone',
+                data: pitchTypes.map(pt => pitchData[pt].outZone.contact_rate || 0),
+                backgroundColor: 'rgba(153, 102, 255, 0.6)'
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true, max: 100 }
+            }
+        }
+    });
+
+    // Zone Comparison Chart
+    if (charts.zoneComparison) charts.zoneComparison.destroy();
+    const zoneCtx = document.getElementById('zoneComparisonChart').getContext('2d');
+    
+    // Aggregate data across all pitch types
+    let inZoneSwings = 0, inZoneTotal = 0;
+    let outZoneSwings = 0, outZoneTotal = 0;
+    let inZoneContacts = 0, outZoneContacts = 0;
+    
+    data.matrix.forEach(item => {
+        if (item.location === 'In Zone') {
+            inZoneTotal += item.total_pitches;
+            inZoneSwings += item.swings;
+            inZoneContacts += item.contacts;
+        } else {
+            outZoneTotal += item.total_pitches;
+            outZoneSwings += item.swings;
+            outZoneContacts += item.contacts;
+        }
+    });
+
+    const inZoneSwingRate = inZoneTotal > 0 ? (inZoneSwings / inZoneTotal * 100) : 0;
+    const outZoneSwingRate = outZoneTotal > 0 ? (outZoneSwings / outZoneTotal * 100) : 0;
+    const inZoneContactRate = inZoneSwings > 0 ? (inZoneContacts / inZoneSwings * 100) : 0;
+    const outZoneContactRate = outZoneSwings > 0 ? (outZoneContacts / outZoneSwings * 100) : 0;
+
+    charts.zoneComparison = new Chart(zoneCtx, {
+        type: 'bar',
+        data: {
+            labels: ['In Zone', 'Out of Zone'],
+            datasets: [{
+                label: 'Swing Rate %',
+                data: [inZoneSwingRate, outZoneSwingRate],
+                backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                yAxisID: 'y'
+            }, {
+                label: 'Contact Rate %',
+                data: [inZoneContactRate, outZoneContactRate],
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                yAxisID: 'y'
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: { beginAtZero: true, max: 100 }
+            }
+        }
+    });
+}
+
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--color-border);
+    color: var(--color-text-primary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background 0.3s ease;
+}
+
+.back-button:hover {
+    background: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.pitchmix-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.control-group-full {
+    flex: 1;
+    min-width: 300px;
+}
+
+.control-label {
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.control-input,
+.control-select {
+    padding: 0.75rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+}
+
+.control-input:focus,
+.control-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.player-search-container {
+    position: relative;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    margin-top: 0.25rem;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.dropdown-item {
+    padding: 0.75rem;
+    cursor: pointer;
+    color: var(--color-text-primary);
+    transition: background 0.2s ease;
+}
+
+.dropdown-item:hover {
+    background: var(--color-border);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: var(--color-border);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+    color: var(--color-text-primary);
+}
+
+.clear-player-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    background: var(--color-accent);
+}
+
+.generate-btn {
+    padding: 0.75rem 1.5rem;
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 0.3s ease;
+}
+
+.generate-btn:hover:not(.disabled) {
+    background: var(--color-accent-bright);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.loading-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 3rem;
+    color: var(--color-text-primary);
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: color-mix(in srgb, var(--color-danger) 30%, var(--color-surface));
+    border: 2px solid var(--color-danger);
+    border-radius: 6px;
+    color: var(--color-danger);
+    margin-bottom: 2rem;
+}
+
+.analysis-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.summary-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.summary-section h2 {
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+    font-size: 1.75rem;
+}
+
+.summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--color-surface-alt);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+}
+
+.stat-label {
+    color: var(--color-text-subtle);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.matrix-container {
+    overflow-x: auto;
+    margin: 2rem 0;
+    background: var(--color-surface);
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.discipline-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 auto;
+}
+
+.discipline-matrix-table th {
+    background: var(--color-surface-muted);
+    color: var(--color-text-primary);
+    padding: 1rem;
+    text-align: center;
+    font-weight: 600;
+    border: 1px solid var(--color-border-strong);
+}
+
+.discipline-matrix-table td {
+    padding: 1rem;
+    text-align: center;
+    border: 1px solid var(--color-border-strong);
+}
+
+.pitch-type-label {
+    background: var(--color-surface-muted);
+    color: var(--color-text-primary);
+    font-weight: 600;
+    text-align: left;
+}
+
+.matrix-cell {
+    position: relative;
+    min-width: 120px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.matrix-cell:hover {
+    transform: scale(1.05);
+    z-index: 10;
+}
+
+.matrix-cell.empty {
+    background: var(--color-surface-alt);
+    color: var(--color-text-tertiary);
+}
+
+.matrix-cell.high {
+    background: linear-gradient(135deg, rgba(255, 99, 132, 0.3), rgba(255, 99, 132, 0.5));
+}
+
+.matrix-cell.medium {
+    background: linear-gradient(135deg, rgba(255, 206, 86, 0.3), rgba(255, 206, 86, 0.5));
+}
+
+.matrix-cell.low {
+    background: linear-gradient(135deg, rgba(75, 192, 192, 0.3), rgba(75, 192, 192, 0.5));
+}
+
+.matrix-cell.high-chase {
+    background: linear-gradient(135deg, rgba(255, 99, 132, 0.4), rgba(255, 99, 132, 0.6));
+}
+
+.matrix-cell.medium-chase {
+    background: linear-gradient(135deg, rgba(255, 159, 64, 0.3), rgba(255, 159, 64, 0.5));
+}
+
+.matrix-cell.low-chase {
+    background: linear-gradient(135deg, rgba(75, 192, 192, 0.3), rgba(75, 192, 192, 0.5));
+}
+
+.matrix-cell.high-contact {
+    background: linear-gradient(135deg, rgba(75, 192, 192, 0.4), rgba(75, 192, 192, 0.6));
+}
+
+.matrix-cell.medium-contact {
+    background: linear-gradient(135deg, rgba(54, 162, 235, 0.3), rgba(54, 162, 235, 0.5));
+}
+
+.matrix-cell.low-contact {
+    background: linear-gradient(135deg, rgba(255, 99, 132, 0.3), rgba(255, 99, 132, 0.5));
+}
+
+.matrix-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.matrix-count {
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+}
+
+.metric-selector-section {
+    margin: 2rem 0;
+    padding: 1.5rem;
+    background: var(--color-surface);
+    border-radius: 8px;
+}
+
+.metric-selector-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.metric-selector-row label {
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+
+.metric-select {
+    padding: 0.5rem 1rem;
+    background: var(--color-surface-muted);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.charts-section {
+    margin-top: 3rem;
+}
+
+.chart-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+
+@media (max-width: 1200px) {
+    .chart-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .header-content {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .pitchmix-controls {
+        flex-direction: column;
+    }
+    
+    .control-group-full {
+        min-width: 100%;
+    }
+}
+</style>
+{% endblock %}
+

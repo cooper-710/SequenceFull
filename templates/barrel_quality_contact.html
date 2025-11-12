@@ -1,0 +1,1186 @@
+{% extends "base.html" %}
+{% from 'partials/idle_placeholder.html' import idle_placeholder %}
+{% block title %}Barrel Rate & Quality of Contact - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Barrel Rate & Quality of Contact</h1>
+                <p class="page-subtitle">Comprehensive batted ball analysis with launch angle/exit velocity scatter plots, barrel rate zones, sweet spot percentages, and quality of contact breakdowns</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="barrel-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Player Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="playerSearch" 
+                        class="control-input" 
+                        placeholder="Type to search players..."
+                        autocomplete="off"
+                    >
+                    <div id="playerSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedPlayerDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedPlayerName"></span>
+                    <button id="clearPlayer" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <button id="generateBarrelAnalysis" class="generate-btn" type="button">
+                <i class="fas fa-bullseye"></i> Generate Analysis
+            </button>
+        </div>
+
+        <!-- Main Visualization Container -->
+        <div class="barrel-visualization-container">
+            <!-- Scatter Plot Section -->
+            <div class="visualization-section">
+                <div class="section-header">
+                    <h2>Launch Angle vs Exit Velocity</h2>
+                    <p class="section-subtitle">Batted ball scatter plot with barrel zone overlays</p>
+                </div>
+                <div class="chart-container heatmap-wrapper">
+                    <canvas id="scatterPlotCanvas"></canvas>
+                    <div id="scatterTooltip" class="barrel-tooltip" style="display: none;"></div>
+                    {{ idle_placeholder('scatterPlaceholder') }}
+                </div>
+            </div>
+
+            <!-- Quality of Contact Breakdown -->
+            <div class="visualization-section">
+                <div class="section-header">
+                    <h2>Quality of Contact Breakdown</h2>
+                    <p class="section-subtitle">Percentage distribution of contact types</p>
+                </div>
+                <div class="quality-breakdown">
+                    <div class="quality-card">
+                        <div class="quality-icon" style="background: linear-gradient(135deg, #FF6B6B, #FF8E53);">
+                            <i class="fas fa-fire"></i>
+                        </div>
+                        <div class="quality-info">
+                            <div class="quality-label">Barrels</div>
+                            <div class="quality-value" id="barrelPct">--</div>
+                            <div class="quality-count" id="barrelCount">--</div>
+                        </div>
+                    </div>
+                    <div class="quality-card">
+                        <div class="quality-icon" style="background: linear-gradient(135deg, #4ECDC4, #44A08D);">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="quality-info">
+                            <div class="quality-label">Solid Contact</div>
+                            <div class="quality-value" id="solidPct">--</div>
+                            <div class="quality-count" id="solidCount">--</div>
+                        </div>
+                    </div>
+                    <div class="quality-card">
+                        <div class="quality-icon" style="background: linear-gradient(135deg, #A8E6CF, #3FC1C9);">
+                            <i class="fas fa-bolt"></i>
+                        </div>
+                        <div class="quality-info">
+                            <div class="quality-label">Flares/Burners</div>
+                            <div class="quality-value" id="flarePct">--</div>
+                            <div class="quality-count" id="flareCount">--</div>
+                        </div>
+                    </div>
+                    <div class="quality-card">
+                        <div class="quality-icon" style="background: linear-gradient(135deg, #FFD93D, #FFA07A);">
+                            <i class="fas fa-arrow-down"></i>
+                        </div>
+                        <div class="quality-info">
+                            <div class="quality-label">Topped</div>
+                            <div class="quality-value" id="toppedPct">--</div>
+                            <div class="quality-count" id="toppedCount">--</div>
+                        </div>
+                    </div>
+                    <div class="quality-card">
+                        <div class="quality-icon" style="background: linear-gradient(135deg, #95A5A6, #7F8C8D);">
+                            <i class="fas fa-circle"></i>
+                        </div>
+                        <div class="quality-info">
+                            <div class="quality-label">Weak Contact</div>
+                            <div class="quality-value" id="weakPct">--</div>
+                            <div class="quality-count" id="weakCount">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Key Metrics Summary -->
+            <div class="visualization-section">
+                <div class="section-header">
+                    <h2>Key Metrics</h2>
+                </div>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-label">Barrel Rate</div>
+                        <div class="metric-value" id="barrelRate">--</div>
+                        <div class="metric-description">% of batted balls classified as barrels</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Sweet Spot %</div>
+                        <div class="metric-value" id="sweetSpotPct">--</div>
+                        <div class="metric-description">8-32° launch angle</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Hard Hit %</div>
+                        <div class="metric-value" id="hardHitPct">--</div>
+                        <div class="metric-description">≥ 95 mph exit velocity</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Avg Exit Velocity</div>
+                        <div class="metric-value" id="avgExitVelo">--</div>
+                        <div class="metric-description">mph</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Avg Launch Angle</div>
+                        <div class="metric-value" id="avgLaunchAngle">--</div>
+                        <div class="metric-description">degrees</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-label">Total Batted Balls</div>
+                        <div class="metric-value" id="totalBattedBalls">--</div>
+                        <div class="metric-description">events</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Expected Production Heatmap -->
+            <div class="visualization-section">
+                <div class="section-header">
+                    <h2>Expected Production Heatmap</h2>
+                    <p class="section-subtitle">Average expected wOBA by launch angle and exit velocity zones</p>
+                </div>
+                <div class="chart-container heatmap-wrapper">
+                    <canvas id="heatmapCanvas"></canvas>
+                    <div id="heatmapTooltip" class="barrel-tooltip" style="display: none;"></div>
+                    {{ idle_placeholder('barrelHeatmapPlaceholder') }}
+                </div>
+            </div>
+
+            <!-- Info Message -->
+            <div id="barrelInfo" class="barrel-info">
+                <p>Select a player and click "Generate Analysis" to view barrel rate and quality of contact metrics.</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Barrel zone definitions (from Statcast)
+function classifyBarrel(launchAngle, exitVelocity) {
+    if (!launchAngle || !exitVelocity || launchAngle < -50 || launchAngle > 50) {
+        return null;
+    }
+    
+    // Barrel classification: 8-50° launch angle with exit velocity thresholds
+    // The minimum exit velocity varies based on launch angle
+    const la = Math.round(launchAngle);
+    const ev = exitVelocity;
+    
+    if (la >= 8 && la <= 50) {
+        // Calculate minimum exit velocity based on launch angle
+        // Formula: min_ev decreases as launch angle increases (peaks around 26°)
+        let minEV;
+        if (la <= 8) {
+            minEV = 98;
+        } else if (la <= 12) {
+            minEV = 98;
+        } else if (la <= 14) {
+            minEV = 98;
+        } else if (la <= 16) {
+            minEV = 97;
+        } else if (la <= 18) {
+            minEV = 96;
+        } else if (la <= 20) {
+            minEV = 95;
+        } else if (la <= 22) {
+            minEV = 94;
+        } else if (la <= 24) {
+            minEV = 93;
+        } else if (la <= 26) {
+            minEV = 92;
+        } else if (la <= 28) {
+            minEV = 91;
+        } else if (la <= 30) {
+            minEV = 90;
+        } else if (la <= 32) {
+            minEV = 89;
+        } else if (la <= 34) {
+            minEV = 88;
+        } else if (la <= 36) {
+            minEV = 87;
+        } else if (la <= 38) {
+            minEV = 86;
+        } else if (la <= 40) {
+            minEV = 85;
+        } else if (la <= 42) {
+            minEV = 84;
+        } else if (la <= 44) {
+            minEV = 83;
+        } else if (la <= 46) {
+            minEV = 82;
+        } else if (la <= 48) {
+            minEV = 81;
+        } else { // 50°
+            minEV = 80;
+        }
+        
+        // Maximum exit velocity (typically 117 mph)
+        const maxEV = 117;
+        
+        if (ev >= minEV && ev <= maxEV) {
+            return 'barrel';
+        }
+    }
+    
+    return null;
+}
+
+function classifyQualityOfContact(launchAngle, exitVelocity) {
+    if (!launchAngle || !exitVelocity) {
+        return 'unknown';
+    }
+    
+    // Check for barrel first
+    if (classifyBarrel(launchAngle, exitVelocity) === 'barrel') {
+        return 'barrel';
+    }
+    
+    // Solid contact: hard hit (≥95 mph) with good launch angle (8-32°)
+    if (exitVelocity >= 95 && launchAngle >= 8 && launchAngle <= 32) {
+        return 'solid';
+    }
+    
+    // Flares/burners: hard hit (≥95 mph) but launch angle outside sweet spot
+    if (exitVelocity >= 95 && (launchAngle < 8 || launchAngle > 32)) {
+        return 'flare';
+    }
+    
+    // Topped: negative or very low launch angle (ground balls)
+    if (launchAngle < 8) {
+        return 'topped';
+    }
+    
+    // Weak contact: low exit velocity
+    if (exitVelocity < 95) {
+        return 'weak';
+    }
+    
+    return 'other';
+}
+
+let selectedPlayer = null;
+let barrelData = null;
+let scatterChart = null;
+let heatmapChart = null;
+
+function setBarrelPlaceholderVisible(placeholderId, visible) {
+    const placeholder = document.getElementById(placeholderId);
+    if (!placeholder) return;
+    if (visible) {
+        placeholder.classList.remove('hidden');
+    } else {
+        placeholder.classList.add('hidden');
+    }
+}
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadFilterOptions();
+    setupPlayerSearch();
+    
+    const generateBtn = document.getElementById('generateBarrelAnalysis');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+        generateBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (!selectedPlayer) {
+                alert('Please select a player first');
+                return;
+            }
+            generateBarrelAnalysis();
+        });
+    }
+
+    document.getElementById('clearPlayer').addEventListener('click', function() {
+        clearPlayerSelection();
+    });
+});
+
+async function loadFilterOptions() {
+    try {
+        const response = await fetch('/api/analytics/players');
+        const data = await response.json();
+        if (data.players) {
+            console.log(`Loaded ${data.players.length} players for search`);
+        }
+    } catch (error) {
+        console.error('Error loading filter options:', error);
+    }
+}
+
+async function loadPlayerSeasons(playerName) {
+    try {
+        const encodedName = encodeURIComponent(playerName);
+        const response = await fetch(`/api/csv/player/${encodedName}/seasons`);
+        
+        if (!response.ok) {
+            const seasonSelect = document.getElementById('seasonSelect');
+            if (seasonSelect) {
+                seasonSelect.innerHTML = '<option value="">Error loading seasons</option>';
+            }
+            return;
+        }
+        
+        const data = await response.json();
+        const seasons = data.seasons || [];
+        
+        const seasonSelect = document.getElementById('seasonSelect');
+        if (!seasonSelect) return;
+        
+        seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+        
+        if (seasons.length === 0) {
+            seasonSelect.innerHTML = '<option value="">No seasons available</option>';
+        } else {
+            const sortedSeasons = [...seasons].sort((a, b) => {
+                const aInt = parseInt(a) || 0;
+                const bInt = parseInt(b) || 0;
+                return bInt - aInt;
+            });
+            
+            sortedSeasons.forEach(season => {
+                const option = document.createElement('option');
+                option.value = season;
+                option.textContent = season;
+                seasonSelect.appendChild(option);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading player seasons:', error);
+    }
+}
+
+let searchTimeout = null;
+
+function setupPlayerSearch() {
+    const input = document.getElementById('playerSearch');
+    const dropdown = document.getElementById('playerSearchDropdown');
+    
+    if (!input || !dropdown) return;
+    
+    input.disabled = false;
+    input.readOnly = false;
+    input.style.pointerEvents = 'auto';
+    
+    async function searchPlayers() {
+        const searchTerm = input.value.trim();
+        
+        if (!searchTerm || searchTerm.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/csv/search?q=${encodeURIComponent(searchTerm)}`);
+            const data = await response.json();
+            
+            if (data.error) throw new Error(data.error);
+            
+            const players = data.players || [];
+            
+            if (players.length === 0) {
+                dropdown.innerHTML = '<div class="player-dropdown-item" style="color: var(--color-text-muted);">No players found</div>';
+                dropdown.style.display = 'block';
+                return;
+            }
+            
+            dropdown.innerHTML = players.slice(0, 10).map(player => 
+                `<div class="player-dropdown-item" data-player="${player.name.replace(/"/g, '&quot;')}">${player.name}</div>`
+            ).join('');
+            dropdown.style.display = 'block';
+            
+            dropdown.querySelectorAll('.player-dropdown-item').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const playerName = this.getAttribute('data-player');
+                    if (playerName && !playerName.includes('No players found')) {
+                        selectPlayer(playerName);
+                    }
+                });
+            });
+        } catch (error) {
+            console.error('Search error:', error);
+            dropdown.style.display = 'none';
+        }
+    }
+    
+    input.addEventListener('input', function(e) {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(searchPlayers, 300);
+    });
+    
+    input.addEventListener('focus', function() {
+        if (this.value.trim().length >= 2) {
+            searchPlayers();
+        }
+    });
+    
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(searchTimeout);
+            const firstMatch = dropdown.querySelector('.player-dropdown-item[data-player]');
+            if (firstMatch && !firstMatch.textContent.includes('No players found')) {
+                firstMatch.click();
+            } else if (this.value.trim().length >= 2) {
+                selectPlayer(this.value.trim());
+            }
+        }
+    });
+    
+    document.addEventListener('click', function(e) {
+        if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+async function selectPlayer(playerName) {
+    selectedPlayer = playerName;
+    document.getElementById('selectedPlayerName').textContent = playerName;
+    document.getElementById('selectedPlayerDisplay').style.display = 'flex';
+    const searchInput = document.getElementById('playerSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('playerSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    const generateBtn = document.getElementById('generateBarrelAnalysis');
+    if (generateBtn) {
+        generateBtn.classList.remove('disabled');
+    }
+    await loadPlayerSeasons(playerName);
+}
+
+function clearPlayerSelection() {
+    selectedPlayer = null;
+    document.getElementById('selectedPlayerDisplay').style.display = 'none';
+    document.getElementById('playerSearch').value = '';
+    const generateBtn = document.getElementById('generateBarrelAnalysis');
+    if (generateBtn) {
+        generateBtn.classList.add('disabled');
+    }
+    
+    const seasonSelect = document.getElementById('seasonSelect');
+    seasonSelect.innerHTML = '<option value="">All Seasons</option>';
+    
+    // Clear visualizations
+    if (scatterChart) {
+        scatterChart.destroy();
+        scatterChart = null;
+    }
+    if (heatmapChart) {
+        heatmapChart.destroy();
+        heatmapChart = null;
+    }
+    
+    barrelData = null;
+    
+    const info = document.getElementById('barrelInfo');
+    info.innerHTML = '<p>Select a player and click "Generate Analysis" to view barrel rate and quality of contact metrics.</p>';
+    setBarrelPlaceholderVisible('scatterPlaceholder', true);
+    setBarrelPlaceholderVisible('barrelHeatmapPlaceholder', true);
+}
+
+async function generateBarrelAnalysis() {
+    if (!selectedPlayer) {
+        alert('Please select a player first');
+        return;
+    }
+
+    const season = document.getElementById('seasonSelect').value;
+
+    const info = document.getElementById('barrelInfo');
+    info.innerHTML = `
+        <div class="barrel-info-message barrel-info-loading">
+            <div class="barrel-info-title">Generating Analysis…</div>
+            <div class="barrel-info-text">Fetching batted ball data from Statcast.</div>
+        </div>
+    `;
+
+    try {
+        const params = new URLSearchParams({
+            player: selectedPlayer
+        });
+
+        if (season) params.append('season', season);
+
+        const response = await fetch(`/api/visuals/barrel-quality-contact?${params.toString()}`);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || 'Failed to fetch barrel analysis data');
+        }
+
+        const data = await response.json();
+        barrelData = data;
+        renderVisualizations(data);
+    } catch (error) {
+        console.error('Error generating barrel analysis:', error);
+        info.innerHTML = `
+            <div class="barrel-info-message barrel-info-warning">
+                <div class="barrel-info-title">Unable to generate analysis</div>
+                <div class="barrel-info-text">${error.message}</div>
+            </div>
+        `;
+        setBarrelPlaceholderVisible('scatterPlaceholder', true);
+        setBarrelPlaceholderVisible('barrelHeatmapPlaceholder', true);
+    }
+}
+
+function renderVisualizations(data) {
+    if (!data || !data.data || data.data.length === 0) {
+        document.getElementById('barrelInfo').innerHTML = '<p style="color: var(--color-danger);">No batted ball data available for the selected filters.</p>';
+        setBarrelPlaceholderVisible('scatterPlaceholder', true);
+        setBarrelPlaceholderVisible('barrelHeatmapPlaceholder', true);
+        return;
+    }
+    
+    // Update quality of contact breakdown
+    updateQualityBreakdown(data.summary);
+    
+    // Update key metrics
+    updateKeyMetrics(data.summary);
+    
+    // Render scatter plot
+    renderScatterPlot(data.data, data.summary);
+    
+    // Render heatmap
+    renderHeatmap(data.data);
+    
+    setBarrelPlaceholderVisible('scatterPlaceholder', false);
+    setBarrelPlaceholderVisible('barrelHeatmapPlaceholder', false);
+    
+    // Update info message
+    const info = document.getElementById('barrelInfo');
+    info.innerHTML = `<p style="color: color-mix(in srgb, var(--color-success) 80%, #6ee7b7);">Analysis complete. Showing ${data.data.length} batted balls.</p>`;
+}
+
+function updateQualityBreakdown(summary) {
+    const total = summary.total_batted_balls || 0;
+    
+    const barrelCount = summary.quality_counts?.barrel || 0;
+    const solidCount = summary.quality_counts?.solid || 0;
+    const flareCount = summary.quality_counts?.flare || 0;
+    const toppedCount = summary.quality_counts?.topped || 0;
+    const weakCount = summary.quality_counts?.weak || 0;
+    
+    document.getElementById('barrelPct').textContent = total > 0 ? (barrelCount / total * 100).toFixed(1) + '%' : '--';
+    document.getElementById('barrelCount').textContent = barrelCount + ' events';
+    
+    document.getElementById('solidPct').textContent = total > 0 ? (solidCount / total * 100).toFixed(1) + '%' : '--';
+    document.getElementById('solidCount').textContent = solidCount + ' events';
+    
+    document.getElementById('flarePct').textContent = total > 0 ? (flareCount / total * 100).toFixed(1) + '%' : '--';
+    document.getElementById('flareCount').textContent = flareCount + ' events';
+    
+    document.getElementById('toppedPct').textContent = total > 0 ? (toppedCount / total * 100).toFixed(1) + '%' : '--';
+    document.getElementById('toppedCount').textContent = toppedCount + ' events';
+    
+    document.getElementById('weakPct').textContent = total > 0 ? (weakCount / total * 100).toFixed(1) + '%' : '--';
+    document.getElementById('weakCount').textContent = weakCount + ' events';
+}
+
+function updateKeyMetrics(summary) {
+    document.getElementById('barrelRate').textContent = summary.barrel_rate ? summary.barrel_rate.toFixed(1) + '%' : '--';
+    document.getElementById('sweetSpotPct').textContent = summary.sweet_spot_pct ? summary.sweet_spot_pct.toFixed(1) + '%' : '--';
+    document.getElementById('hardHitPct').textContent = summary.hard_hit_pct ? summary.hard_hit_pct.toFixed(1) + '%' : '--';
+    document.getElementById('avgExitVelo').textContent = summary.avg_exit_velocity ? summary.avg_exit_velocity.toFixed(1) : '--';
+    document.getElementById('avgLaunchAngle').textContent = summary.avg_launch_angle ? summary.avg_launch_angle.toFixed(1) : '--';
+    document.getElementById('totalBattedBalls').textContent = summary.total_batted_balls || 0;
+}
+
+function renderScatterPlot(data, summary) {
+    const canvas = document.getElementById('scatterPlotCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Destroy existing chart if it exists
+    if (scatterChart) {
+        scatterChart.destroy();
+    }
+    
+    // Filter data with valid launch angle and exit velocity
+    const validData = data.filter(d => 
+        d.launch_angle !== null && 
+        d.launch_angle !== undefined && 
+        d.exit_velocity !== null && 
+        d.exit_velocity !== undefined
+    );
+    
+    // Group data by quality of contact
+    const barrelData = validData.filter(d => classifyQualityOfContact(d.launch_angle, d.exit_velocity) === 'barrel');
+    const solidData = validData.filter(d => classifyQualityOfContact(d.launch_angle, d.exit_velocity) === 'solid');
+    const flareData = validData.filter(d => classifyQualityOfContact(d.launch_angle, d.exit_velocity) === 'flare');
+    const toppedData = validData.filter(d => classifyQualityOfContact(d.launch_angle, d.exit_velocity) === 'topped');
+    const weakData = validData.filter(d => classifyQualityOfContact(d.launch_angle, d.exit_velocity) === 'weak');
+    
+    scatterChart = new Chart(ctx, {
+        type: 'scatter',
+        data: {
+            datasets: [
+                {
+                    label: 'Barrels',
+                    data: barrelData.map(d => ({x: d.launch_angle, y: d.exit_velocity})),
+                    backgroundColor: 'rgba(255, 107, 107, 0.6)',
+                    borderColor: 'rgba(255, 107, 107, 1)',
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                },
+                {
+                    label: 'Solid Contact',
+                    data: solidData.map(d => ({x: d.launch_angle, y: d.exit_velocity})),
+                    backgroundColor: 'rgba(78, 205, 196, 0.6)',
+                    borderColor: 'rgba(78, 205, 196, 1)',
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                },
+                {
+                    label: 'Flares/Burners',
+                    data: flareData.map(d => ({x: d.launch_angle, y: d.exit_velocity})),
+                    backgroundColor: 'rgba(168, 230, 207, 0.6)',
+                    borderColor: 'rgba(168, 230, 207, 1)',
+                    pointRadius: 3,
+                    pointHoverRadius: 5
+                },
+                {
+                    label: 'Topped',
+                    data: toppedData.map(d => ({x: d.launch_angle, y: d.exit_velocity})),
+                    backgroundColor: 'rgba(255, 217, 61, 0.6)',
+                    borderColor: 'rgba(255, 217, 61, 1)',
+                    pointRadius: 2,
+                    pointHoverRadius: 4
+                },
+                {
+                    label: 'Weak Contact',
+                    data: weakData.map(d => ({x: d.launch_angle, y: d.exit_velocity})),
+                    backgroundColor: 'rgba(149, 165, 166, 0.6)',
+                    borderColor: 'rgba(149, 165, 166, 1)',
+                    pointRadius: 2,
+                    pointHoverRadius: 4
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Launch Angle vs Exit Velocity',
+                    color: 'var(--color-text-primary)',
+                    font: { size: 16, weight: 'bold' }
+                },
+                legend: {
+                    display: true,
+                    position: 'top',
+                    labels: { color: 'var(--color-text-primary)' }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const point = validData.find(d => 
+                                Math.abs(d.launch_angle - context.raw.x) < 0.1 && 
+                                Math.abs(d.exit_velocity - context.raw.y) < 0.1
+                            );
+                            if (point) {
+                                return [
+                                    `Launch Angle: ${point.launch_angle.toFixed(1)}°`,
+                                    `Exit Velocity: ${point.exit_velocity.toFixed(1)} mph`,
+                                    `Event: ${point.events || 'N/A'}`
+                                ];
+                            }
+                            return `${context.dataset.label}: (${context.raw.x.toFixed(1)}°, ${context.raw.y.toFixed(1)} mph)`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Launch Angle (°)',
+                        color: 'var(--color-text-primary)'
+                    },
+                    ticks: { color: 'var(--color-text-primary)' },
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Exit Velocity (mph)',
+                        color: 'var(--color-text-primary)'
+                    },
+                    ticks: { color: 'var(--color-text-primary)' },
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                }
+            }
+        }
+    });
+}
+
+function renderHeatmap(data) {
+    // This would create a heatmap showing expected wOBA by launch angle/exit velocity zones
+    // For now, we'll create a simple visualization
+    const canvas = document.getElementById('heatmapCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    if (heatmapChart) {
+        heatmapChart.destroy();
+    }
+    
+    // Simple placeholder - in production, this would show expected wOBA heatmap
+    // For now, we'll show a message that this feature is coming soon
+    ctx.fillStyle = 'var(--color-surface)';
+    ctx.fillRect(0, 0, canvas.width || 800, canvas.height || 400);
+    ctx.fillStyle = 'var(--color-text-muted)';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('Expected Production Heatmap Coming Soon', (canvas.width || 800) / 2, (canvas.height || 400) / 2);
+}
+
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+    font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--color-text-primary);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-page-bg) 85%, white), var(--color-page-bg));
+    min-height: 100vh;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 2rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-primary);
+    text-decoration: none;
+    font-size: 0.95rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.back-button:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.barrel-controls {
+    display: flex;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    padding: 1.5rem;
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 16px;
+    margin-bottom: 2rem;
+    box-shadow: var(--shadow-floating);
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    min-width: 150px;
+}
+
+.control-group-full {
+    width: 100%;
+    min-width: 100%;
+}
+
+.player-search-container {
+    position: relative;
+    width: 100%;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    margin-top: 2px;
+}
+
+.player-dropdown-item {
+    padding: 0.75rem 1rem;
+    color: var(--color-text-primary);
+    cursor: pointer;
+    transition: background 0.2s ease;
+    border-bottom: 1px solid color-mix(in srgb, var(--color-border) 80%, var(--color-main-bg));
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+}
+
+.selected-player-display span {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.clear-player-btn {
+    background: none;
+    border: none;
+    color: var(--color-text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    color: var(--color-accent);
+}
+
+.control-label {
+    color: var(--color-text-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.control-select,
+.control-input {
+    padding: 0.75rem 1rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+}
+
+.control-select:focus,
+.control-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.generate-btn {
+    padding: 0.75rem 2rem;
+    background: var(--color-accent);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    color: var(--color-main-bg);
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.generate-btn:hover {
+    background: var(--color-accent-bright);
+    border-color: var(--color-accent-bright);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.3);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: var(--color-border);
+    border-color: var(--color-border);
+}
+
+.barrel-visualization-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.visualization-section {
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 18px;
+    padding: 2rem;
+    box-shadow: var(--shadow-elevated);
+    backdrop-filter: blur(10px);
+}
+
+.section-header {
+    margin-bottom: 1.5rem;
+}
+
+.section-header h2 {
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.section-subtitle {
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.chart-container {
+    position: relative;
+    width: 100%;
+    height: 500px;
+    background: var(--color-layer-soft);
+    border-radius: 16px;
+    padding: 1rem;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.quality-breakdown {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+}
+
+.quality-card {
+    background: color-mix(in srgb, var(--color-layer-card) 92%, var(--color-page-bg));
+    border: 1px solid var(--color-layer-border);
+    border-radius: 14px;
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.quality-card:hover {
+    border-color: var(--color-accent);
+    box-shadow: 0 12px 30px var(--color-accent-soft);
+    transform: translateY(-2px);
+}
+
+.quality-icon {
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.quality-info {
+    flex: 1;
+}
+
+.quality-label {
+    color: var(--color-text-muted);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+}
+
+.quality-value {
+    color: var(--color-text-primary);
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.quality-count {
+    color: var(--color-text-subtle);
+    font-size: 0.8rem;
+}
+
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.metric-card {
+    background: color-mix(in srgb, var(--color-layer-card) 92%, var(--color-page-bg));
+    border: 1px solid var(--color-layer-border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.metric-label {
+    color: var(--color-text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+}
+
+.metric-value {
+    color: var(--color-accent);
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.metric-description {
+    color: var(--color-text-subtle);
+    font-size: 0.75rem;
+}
+
+.barrel-info {
+    padding: 1.25rem 1.5rem;
+    background: var(--color-layer-soft);
+    border-radius: 12px;
+    border: 1px solid var(--color-layer-border);
+    text-align: center;
+    box-shadow: var(--shadow-floating);
+}
+
+.barrel-info p {
+    color: var(--color-text-muted);
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.barrel-tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--color-layer-card) 85%, white);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 10px;
+    padding: 0.75rem 1rem;
+    color: var(--color-text-primary);
+    font-size: 0.85rem;
+    z-index: 1000;
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.25);
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+
+    .header-content {
+        flex-direction: column;
+    }
+
+    .barrel-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .control-group {
+        min-width: 100%;
+    }
+
+    .generate-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .quality-breakdown {
+        grid-template-columns: 1fr;
+    }
+
+    .metrics-grid {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+

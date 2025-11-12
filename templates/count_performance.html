@@ -1,0 +1,942 @@
+{% extends "base.html" %}
+
+{% block title %}Count Performance Breakdown - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Count Performance Breakdown</h1>
+                <p class="page-subtitle">Detailed analysis of batter performance across different ball-strike counts, showing success rates, pitch selection, and outcome probabilities</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="pitchmix-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Batter Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="batterSearch" 
+                        class="control-input" 
+                        placeholder="Type to search batters..."
+                        autocomplete="off"
+                    >
+                    <div id="batterSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedBatterDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedBatterName"></span>
+                    <button id="clearBatter" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <button id="generateAnalysis" class="generate-btn" type="button">
+                <i class="fas fa-chart-bar"></i> Generate Analysis
+            </button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading count performance data...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error-message" style="display: none;">
+            <i class="fas fa-exclamation-circle"></i>
+            <span id="errorText"></span>
+        </div>
+
+        <!-- Main Analysis Content -->
+        <div id="analysisContent" class="analysis-content" style="display: none;">
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <h2 id="batterTitle"></h2>
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Pitches</div>
+                        <div class="stat-value" id="totalPitches">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Batter Hand</div>
+                        <div class="stat-value" id="batterHand">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Season</div>
+                        <div class="stat-value" id="seasonDisplay">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Metrics Overview -->
+            <div class="metrics-overview">
+                <h3>Performance Metrics by Count</h3>
+                <div class="metric-selector-row">
+                    <label>Primary Metric:</label>
+                    <select id="primaryMetricSelect" class="metric-select">
+                        <option value="batting_avg">Batting Average (decimal)</option>
+                        <option value="obp">On-Base Percentage</option>
+                        <option value="k_rate">Strikeout Rate</option>
+                        <option value="bb_rate">Walk Rate</option>
+                        <option value="xwoba">xwOBA</option>
+                        <option value="swing_rate">Swing Rate</option>
+                        <option value="whiff_rate">Whiff Rate</option>
+                        <option value="avg_ev">Average Exit Velocity</option>
+                        <option value="hard_hit_rate">Hard Hit Rate</option>
+                    </select>
+                </div>
+                <div class="chart-container">
+                    <canvas id="performanceChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Detailed Count Breakdown Table -->
+            <div class="count-breakdown-section">
+                <h3>Detailed Count Breakdown</h3>
+                <table id="countBreakdownTable" class="metrics-table">
+                    <thead>
+                        <tr>
+                            <th>Count</th>
+                            <th>Pitches</th>
+                            <th>PA Ending</th>
+                            <th>Hits</th>
+                            <th>Walks</th>
+                            <th>K</th>
+                            <th>AVG</th>
+                            <th>OBP</th>
+                            <th>K%</th>
+                            <th>BB%</th>
+                            <th>Swing%</th>
+                            <th>Whiff%</th>
+                            <th>xwOBA</th>
+                            <th>Avg EV</th>
+                            <th>Hard Hit%</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <!-- Pitch Types Seen by Count -->
+            <div class="pitch-types-section">
+                <h3>Pitch Types Seen by Count</h3>
+                <div class="chart-container">
+                    <canvas id="pitchTypesChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Pitch type colors (for reference)
+const PITCH_COLORS = {
+    "FF": "#FF0000", "FT": "#8B0000", "SI": "#FFA500", "FC": "#808080",
+    "SL": "var(--color-main-bg)0FF", "CU": "#800080", "CH": "#008000", "FS": "#00FFFF",
+    "KC": "#4B0082", "KN": "#D3D3D3", "ST": "#008080", "SV": "#4682B4"
+};
+
+// Pitch type labels
+const PITCH_LABELS = {
+    "FF": "Four-Seam", "FT": "Two-Seam", "SI": "Sinker", "FC": "Cutter",
+    "SL": "Slider", "CU": "Curveball", "CH": "Changeup", "FS": "Splitter",
+    "KC": "Knuckle Curve", "KN": "Knuckleball", "ST": "Sweeper", "SV": "Slurve"
+};
+
+let selectedBatter = null;
+let analysisData = null;
+let charts = {};
+
+// Count order (standard baseball count order)
+const COUNT_ORDER = ['0-0', '1-0', '0-1', '1-1', '2-0', '2-1', '1-2', '2-2', '3-0', '3-1', '3-2', '0-2'];
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', async function() {
+    await loadFilterOptions();
+    setupBatterSearch();
+    
+    document.getElementById('generateAnalysis').addEventListener('click', function() {
+        if (!selectedBatter) {
+            alert('Please select a batter first');
+            return;
+        }
+        generateAnalysis();
+    });
+
+    document.getElementById('clearBatter').addEventListener('click', function() {
+        clearBatterSelection();
+    });
+
+    // Primary metric selector
+    document.getElementById('primaryMetricSelect').addEventListener('change', function() {
+        if (analysisData) {
+            updatePerformanceChart(analysisData.by_count);
+        }
+    });
+});
+
+async function loadFilterOptions() {
+    // Season options
+    const currentYear = new Date().getFullYear();
+    const seasonSelect = document.getElementById('seasonSelect');
+    for (let year = currentYear; year >= 2015; year--) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        seasonSelect.appendChild(option);
+    }
+}
+
+function setupBatterSearch() {
+    const searchInput = document.getElementById('batterSearch');
+    const dropdown = document.getElementById('batterSearchDropdown');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        searchTimeout = setTimeout(async () => {
+            try {
+                const response = await fetch(`/api/csv/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.players && data.players.length > 0) {
+                    dropdown.innerHTML = '';
+                    data.players.slice(0, 10).forEach(player => {
+                        const item = document.createElement('div');
+                        item.className = 'player-dropdown-item';
+                        item.textContent = player.name || player;
+                        item.addEventListener('click', function() {
+                            selectBatter(player.name || player);
+                            dropdown.style.display = 'none';
+                            searchInput.value = '';
+                        });
+                        dropdown.appendChild(item);
+                    });
+                    dropdown.style.display = 'block';
+                } else {
+                    dropdown.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error searching batters:', error);
+            }
+        }, 300);
+    });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+function selectBatter(name) {
+    selectedBatter = name;
+    const searchInput = document.getElementById('batterSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('batterSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    document.getElementById('selectedBatterName').textContent = name;
+    document.getElementById('selectedBatterDisplay').style.display = 'flex';
+    document.getElementById('generateAnalysis').classList.remove('disabled');
+}
+
+function clearBatterSelection() {
+    selectedBatter = null;
+    document.getElementById('selectedBatterDisplay').style.display = 'none';
+    document.getElementById('generateAnalysis').classList.add('disabled');
+    document.getElementById('analysisContent').style.display = 'none';
+    analysisData = null;
+    
+    // Destroy all charts
+    Object.values(charts).forEach(chart => {
+        if (chart) chart.destroy();
+    });
+    charts = {};
+}
+
+async function generateAnalysis() {
+    const season = document.getElementById('seasonSelect').value;
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    const analysisContent = document.getElementById('analysisContent');
+    
+    // Hide previous content
+    errorMessage.style.display = 'none';
+    analysisContent.style.display = 'none';
+    loadingIndicator.style.display = 'flex';
+    
+    try {
+        let url = `/api/visuals/count-performance?batter=${encodeURIComponent(selectedBatter)}`;
+        if (season) {
+            url += `&season=${season}`;
+        }
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        analysisData = data;
+        displayAnalysis(data);
+        loadingIndicator.style.display = 'none';
+        analysisContent.style.display = 'block';
+    } catch (error) {
+        loadingIndicator.style.display = 'none';
+        errorMessage.style.display = 'flex';
+        document.getElementById('errorText').textContent = error.message;
+        console.error('Error generating analysis:', error);
+    }
+}
+
+function displayAnalysis(data) {
+    // Update summary
+    document.getElementById('batterTitle').textContent = data.batter;
+    document.getElementById('totalPitches').textContent = data.total_pitches.toLocaleString();
+    document.getElementById('batterHand').textContent = data.batter_hand === 'R' ? 'Right' : 'Left';
+    document.getElementById('seasonDisplay').textContent = data.season || 'All Seasons';
+    
+    // Display charts and tables
+    updatePerformanceChart(data.by_count);
+    updateCountBreakdownTable(data.by_count);
+    updatePitchTypesChart(data.by_count);
+}
+
+function updatePerformanceChart(countData) {
+    const ctx = document.getElementById('performanceChart').getContext('2d');
+    const metric = document.getElementById('primaryMetricSelect').value;
+    
+    if (charts.performance) {
+        charts.performance.destroy();
+    }
+    
+    // Get counts in order
+    const counts = COUNT_ORDER.filter(count => countData[count]);
+    const values = counts.map(count => {
+        const data = countData[count];
+        if (!data) return null;
+        let value = data[metric];
+        // Handle null/undefined values - Chart.js will skip these
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+        // Ensure value is a number
+        return typeof value === 'number' ? value : parseFloat(value);
+    });
+    
+    // Debug logging
+    console.log('Chart update:', {
+        metric: metric,
+        counts: counts,
+        values: values,
+        sampleData: counts.length > 0 ? countData[counts[0]] : null
+    });
+    
+    // Get metric label
+    const metricLabels = {
+        'batting_avg': 'Batting Average',
+        'obp': 'On-Base Percentage (%)',
+        'k_rate': 'Strikeout Rate (%)',
+        'bb_rate': 'Walk Rate (%)',
+        'xwoba': 'xwOBA',
+        'swing_rate': 'Swing Rate (%)',
+        'whiff_rate': 'Whiff Rate (%)',
+        'avg_ev': 'Average Exit Velocity (mph)',
+        'hard_hit_rate': 'Hard Hit Rate (%)'
+    };
+    
+    const yAxisLabel = metricLabels[metric] || metric;
+    const isPercentage = metric.includes('rate') || metric === 'obp';
+    const isEv = metric === 'avg_ev';
+    const isBattingAvg = metric === 'batting_avg';
+    
+    charts.performance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: counts,
+            datasets: [{
+                label: yAxisLabel,
+                data: values,
+                backgroundColor: 'var(--color-accent)',
+                borderColor: 'var(--color-accent)',
+                borderWidth: 1,
+                spanGaps: false
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                title: {
+                    display: true,
+                    text: yAxisLabel,
+                    color: 'var(--color-text-primary)',
+                    font: {
+                        size: 16
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: {
+                        color: 'var(--color-text-primary)'
+                    },
+                    grid: {
+                        color: 'var(--color-border-strong)'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    max: isBattingAvg ? 1.0 : undefined,
+                    suggestedMax: isBattingAvg ? 1.0 : undefined,
+                    ticks: {
+                        color: 'var(--color-text-primary)',
+                        callback: function(value) {
+                            if (isNaN(value) || value === null || value === undefined) return '';
+                            if (isPercentage) {
+                                return value.toFixed(1) + '%';
+                            } else if (isEv) {
+                                return value.toFixed(1) + ' mph';
+                            } else if (isBattingAvg) {
+                                return value.toFixed(3);
+                            } else {
+                                return value.toFixed(3);
+                            }
+                        }
+                    },
+                    grid: {
+                        color: 'var(--color-border-strong)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateCountBreakdownTable(countData) {
+    const tbody = document.querySelector('#countBreakdownTable tbody');
+    tbody.innerHTML = '';
+    
+    // Sort counts in order
+    const counts = COUNT_ORDER.filter(count => countData[count]);
+    
+    counts.forEach(count => {
+        const row = tbody.insertRow();
+        const data = countData[count];
+        
+        row.insertCell(0).textContent = count;
+        row.insertCell(1).textContent = data.total_pitches.toLocaleString();
+        row.insertCell(2).textContent = data.pa_ending.toLocaleString();
+        row.insertCell(3).textContent = data.hits.toLocaleString();
+        row.insertCell(4).textContent = data.walks.toLocaleString();
+        row.insertCell(5).textContent = data.strikeouts.toLocaleString();
+        row.insertCell(6).textContent = data.batting_avg !== null ? data.batting_avg.toFixed(3) : 'N/A';
+        row.insertCell(7).textContent = data.obp !== null ? data.obp.toFixed(1) + '%' : 'N/A';
+        row.insertCell(8).textContent = data.k_rate !== null ? data.k_rate.toFixed(1) + '%' : 'N/A';
+        row.insertCell(9).textContent = data.bb_rate !== null ? data.bb_rate.toFixed(1) + '%' : 'N/A';
+        row.insertCell(10).textContent = data.swing_rate.toFixed(1) + '%';
+        row.insertCell(11).textContent = data.whiff_rate !== null ? data.whiff_rate.toFixed(1) + '%' : 'N/A';
+        row.insertCell(12).textContent = data.xwoba !== null ? data.xwoba.toFixed(3) : 'N/A';
+        row.insertCell(13).textContent = data.avg_ev !== null ? data.avg_ev.toFixed(1) + ' mph' : 'N/A';
+        row.insertCell(14).textContent = data.hard_hit_rate !== null ? data.hard_hit_rate.toFixed(1) + '%' : 'N/A';
+    });
+}
+
+function updatePitchTypesChart(countData) {
+    const ctx = document.getElementById('pitchTypesChart').getContext('2d');
+    
+    if (charts.pitchTypes) {
+        charts.pitchTypes.destroy();
+    }
+    
+    // Get all unique pitch types across all counts
+    const allPitchTypes = new Set();
+    COUNT_ORDER.forEach(count => {
+        if (countData[count] && countData[count].pitch_types_seen) {
+            Object.keys(countData[count].pitch_types_seen).forEach(pt => allPitchTypes.add(pt));
+        }
+    });
+    const pitchTypes = Array.from(allPitchTypes);
+    
+    // Get counts in order
+    const counts = COUNT_ORDER.filter(count => countData[count]);
+    
+    // Prepare datasets for stacked bar chart
+    const datasets = pitchTypes.map(pitchType => {
+        const data = counts.map(count => {
+            const countDataPt = countData[count];
+            if (!countDataPt || !countDataPt.pitch_types_seen || !countDataPt.pitch_types_seen[pitchType]) {
+                return 0;
+            }
+            return countDataPt.pitch_types_seen[pitchType].percentage;
+        });
+        
+        return {
+            label: PITCH_LABELS[pitchType] || pitchType,
+            data: data,
+            backgroundColor: PITCH_COLORS[pitchType] || 'var(--color-text-secondary)'
+        };
+    });
+    
+    charts.pitchTypes = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: counts,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: 'right',
+                    labels: {
+                        color: 'var(--color-text-primary)'
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'Pitch Types Seen by Count (%)',
+                    color: 'var(--color-text-primary)',
+                    font: {
+                        size: 16
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    ticks: {
+                        color: 'var(--color-text-primary)'
+                    },
+                    grid: {
+                        color: 'var(--color-border-strong)'
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: {
+                        color: 'var(--color-text-primary)',
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    },
+                    grid: {
+                        color: 'var(--color-border-strong)'
+                    }
+                }
+            }
+        }
+    });
+}
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--color-border);
+    color: var(--color-text-primary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background 0.3s ease;
+}
+
+.back-button:hover {
+    background: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.pitchmix-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.control-group-full {
+    flex: 1;
+    min-width: 300px;
+}
+
+.control-label {
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.control-input,
+.control-select {
+    padding: 0.75rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+}
+
+.control-input:focus,
+.control-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.player-search-container {
+    position: relative;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    margin-top: 0.25rem;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.player-dropdown-item {
+    padding: 0.75rem;
+    cursor: pointer;
+    color: var(--color-text-primary);
+    transition: background 0.2s ease;
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-border);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: var(--color-border);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+    color: var(--color-text-primary);
+}
+
+.clear-player-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    background: var(--color-accent);
+}
+
+.generate-btn {
+    padding: 0.75rem 1.5rem;
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 0.3s ease;
+}
+
+.generate-btn:hover:not(.disabled) {
+    background: var(--color-accent-bright);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.loading-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 3rem;
+    color: var(--color-text-primary);
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: color-mix(in srgb, var(--color-danger) 30%, var(--color-surface));
+    border: 2px solid var(--color-danger);
+    border-radius: 6px;
+    color: var(--color-danger);
+    margin-bottom: 2rem;
+}
+
+.analysis-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.summary-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.summary-section h2 {
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+    font-size: 1.75rem;
+}
+
+.summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--color-surface-alt);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+}
+
+.stat-label {
+    color: var(--color-text-subtle);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.metrics-overview {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.metrics-overview h3 {
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.metric-selector-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.metric-selector-row label {
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+
+.metric-select {
+    padding: 0.5rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+}
+
+.chart-container {
+    height: 400px;
+    position: relative;
+}
+
+.count-breakdown-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    overflow-x: auto;
+}
+
+.count-breakdown-section h3 {
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.metrics-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--color-text-primary);
+}
+
+.metrics-table th {
+    background: var(--color-surface-alt);
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 2px solid var(--color-border);
+    font-weight: 600;
+    color: var(--color-accent);
+}
+
+.metrics-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.metrics-table tbody tr:hover {
+    background: var(--color-surface-alt);
+}
+
+.pitch-types-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.pitch-types-section h3 {
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .header-content {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .pitchmix-controls {
+        flex-direction: column;
+    }
+    
+    .control-group-full {
+        min-width: 100%;
+    }
+    
+    .metrics-table {
+        font-size: 0.85rem;
+    }
+    
+    .metrics-table th,
+    .metrics-table td {
+        padding: 0.5rem;
+    }
+}
+</style>
+{% endblock %}
+

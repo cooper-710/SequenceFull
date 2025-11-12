@@ -1,0 +1,2545 @@
+{% extends "base.html" %}
+
+{% block title %}Player Search - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <header class="section-hero">
+        <div class="section-hero-heading">
+            <h1 class="hero-content">Player Search</h1>
+        </div>
+    </header>
+
+    <div class="content-wrapper">
+        <!-- Search -->
+        <div class="search-container">
+            <div class="search-input-wrapper">
+                <input 
+                    type="text" 
+                    id="playerSearch" 
+                    class="search-input" 
+                    placeholder="Enter player name (e.g., Aaron Judge)"
+                    autocomplete="off"
+                >
+                <button id="searchButton" class="search-button">Search</button>
+            </div>
+            <div id="searchSuggestions" class="search-suggestions" style="display: none;"></div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <span>Loading player data...</span>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error-message" style="display: none;"></div>
+
+        <!-- Player Data Display -->
+        <div id="playerDataContainer" class="player-data-container" style="display: none;">
+            <div class="player-header">
+                <div class="search-input-wrapper" style="position: relative;">
+                    <input 
+                        type="text" 
+                        id="playerSearchInHeader" 
+                        class="search-input" 
+                        placeholder="Enter player name (e.g., Aaron Judge)"
+                        autocomplete="off"
+                    >
+                    <button id="searchButtonInHeader" class="search-button">Search</button>
+                    <div id="headerSearchSuggestions" class="search-suggestions" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 1000;"></div>
+                </div>
+                <div id="playerInfo" class="player-info"></div>
+                <div id="yearSelector" class="year-selector" style="display: none;"></div>
+            </div>
+
+            <!-- Stats Tables -->
+            <div class="stats-tables-container">
+                <!-- Dashboard (WAR) -->
+                <div class="stats-section">
+                    <h3 class="stats-section-title">Dashboard</h3>
+                    <div id="dashboardTable" class="stats-table-wrapper"></div>
+                </div>
+                
+                <!-- Fangraphs Stats -->
+                <div class="stats-section">
+                    <h3 class="stats-section-title">FanGraphs Statistics</h3>
+                    <div id="fangraphsTable" class="stats-table-wrapper"></div>
+                </div>
+
+                <!-- Positions Stats -->
+                <div class="stats-section">
+                    <h3 class="stats-section-title">Position & Team Information</h3>
+                    <div id="positionsTable" class="stats-table-wrapper"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="empty-state">
+            <div class="empty-state-content">
+                <div class="empty-state-icon">
+                    <div class="icon-circle">
+                        <i class="fas fa-baseball-ball"></i>
+                    </div>
+                </div>
+                <h2 class="empty-state-title">Player Database</h2>
+                <p class="empty-state-description">Search for any player to view comprehensive statistics, advanced metrics, and detailed performance data</p>
+                
+                <div class="empty-state-features">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <h3>Advanced Stats</h3>
+                        <p>WAR, xwOBA, xBA, xSLG, and more</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-calendar-alt"></i>
+                        </div>
+                        <h3>Multi-Season</h3>
+                        <p>View data across multiple years</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <i class="fas fa-table"></i>
+                        </div>
+                        <h3>Comprehensive</h3>
+                        <p>Dashboard, FanGraphs, and position data</p>
+                    </div>
+                </div>
+                
+                <div class="popular-players">
+                    <p class="popular-players-label">Try searching for:</p>
+                    <div class="player-tags">
+                        <span class="player-tag" data-player="Aaron Judge">Aaron Judge</span>
+                        <span class="player-tag" data-player="Mookie Betts">Mookie Betts</span>
+                        <span class="player-tag" data-player="Ronald Acuña Jr.">Ronald Acuña Jr.</span>
+                        <span class="player-tag" data-player="Shohei Ohtani">Shohei Ohtani</span>
+                        <span class="player-tag" data-player="Juan Soto">Juan Soto</span>
+                        <span class="player-tag" data-player="Vladimir Guerrero Jr.">Vladimir Guerrero Jr.</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.search-container {
+    background: var(--color-layer-card);
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 32px;
+    position: relative;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-elevated);
+    backdrop-filter: blur(8px);
+}
+
+.search-input-wrapper {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+}
+
+.search-input {
+    flex: 1;
+    padding: 16px 20px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    color: var(--color-text-primary);
+    font-size: 16px;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.08);
+    position: relative;
+    z-index: 2;
+    pointer-events: auto;
+}
+
+.search-input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-surface) 92%, var(--color-page-bg));
+    box-shadow: 0 0 0 3px rgba(255, 127, 0, 0.16);
+    transform: translateY(-1px);
+}
+
+.search-button {
+    padding: 16px 32px;
+    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-bright));
+    border: none;
+    border-radius: 10px;
+    color: var(--color-main-bg);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    position: relative;
+    z-index: 2;
+    pointer-events: auto;
+}
+
+.search-button:hover {
+    background: linear-gradient(135deg, var(--color-accent-bright), var(--color-accent));
+    box-shadow: 0 6px 20px rgba(255, 127, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3);
+    transform: translateY(-2px);
+}
+
+.search-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(255, 127, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.search-suggestions {
+    position: absolute;
+    top: calc(100% - 32px);
+    left: 32px;
+    right: 32px;
+    margin-top: 4px;
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 0 0 10px 10px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+    box-shadow: var(--shadow-elevated);
+    pointer-events: auto;
+}
+
+.suggestion-item {
+    padding: 14px 20px;
+    cursor: pointer;
+    color: var(--color-text-secondary);
+    border-bottom: 1px solid var(--color-layer-border-subtle);
+    transition: all 0.2s ease;
+    font-size: 15px;
+}
+
+.suggestion-item:hover {
+    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+    color: var(--color-text-primary);
+    padding-left: 24px;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.loading-indicator {
+    text-align: center;
+    padding: 40px;
+    color: var(--color-text-subtle);
+}
+
+.spinner {
+    border: 3px solid var(--color-border);
+    border-top: 3px solid var(--color-accent);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.error-message {
+    background: color-mix(in srgb, var(--color-danger) 35%, var(--color-surface));
+    border: 1px solid var(--color-danger);
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 16px;
+    color: color-mix(in srgb, var(--color-danger) 70%, var(--color-danger-soft));
+}
+
+.player-data-container {
+    background: var(--color-surface);
+    border-radius: 8px;
+    padding: 24px;
+}
+
+.player-header {
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid var(--color-border);
+}
+
+.player-header .search-input-wrapper {
+    margin-bottom: 16px;
+}
+
+.player-header .search-input {
+    flex: 1;
+    padding: 14px 18px;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 10px;
+    color: var(--color-text-primary);
+    font-size: 15px;
+    transition: all 0.3s ease;
+    box-shadow: inset 0 2px 4px rgba(15, 23, 42, 0.08);
+}
+
+.player-header .search-input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.player-header .search-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-surface) 92%, var(--color-page-bg));
+    box-shadow: 0 0 0 3px rgba(255, 127, 0, 0.16);
+}
+
+.player-header .search-button {
+    padding: 14px 28px;
+    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-bright));
+    border: none;
+    border-radius: 10px;
+    color: var(--color-main-bg);
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+}
+
+.player-header .search-button:hover {
+    background: linear-gradient(135deg, var(--color-accent-bright), var(--color-accent));
+    box-shadow: 0 6px 20px rgba(255, 127, 0, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3);
+    transform: translateY(-2px);
+}
+
+.player-header .search-button:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(255, 127, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.player-info {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.player-info-content {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.player-headshot {
+    flex-shrink: 0;
+    width: 150px;
+    height: 150px;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 3px solid rgba(255, 127, 0, 0.3);
+    box-shadow: var(--shadow-floating);
+    background: var(--color-layer-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.player-headshot img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.player-headshot .headshot-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 127, 0, 0.5);
+    font-size: 48px;
+}
+
+.player-info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.year-selector {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 2px solid var(--color-border);
+}
+
+.year-selector-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding: 16px 20px;
+    background: var(--color-layer-soft);
+    border-radius: 10px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-floating);
+}
+
+.year-selector-label {
+    color: var(--color-accent);
+    font-size: 14px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    min-width: 60px;
+    flex-shrink: 0;
+}
+
+.year-checkboxes {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.year-checkbox-item {
+    position: relative;
+}
+
+.year-checkbox-item input[type="checkbox"].year-checkbox {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    width: 0;
+    height: 0;
+}
+
+.year-checkbox-item label.year-label {
+    display: inline-block;
+    padding: 10px 18px;
+    background: linear-gradient(145deg, var(--color-surface), color-mix(in srgb, var(--color-surface) 90%, var(--color-main-bg)));
+    border: 2px solid var(--color-border);
+    border-radius: 8px;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin: 0;
+    user-select: none;
+    transition: all 0.3s ease;
+    min-width: 70px;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.year-checkbox-item label.year-label:hover {
+    background: linear-gradient(145deg, color-mix(in srgb, var(--color-surface) 85%, var(--color-main-bg)), var(--color-surface));
+    border-color: var(--color-border-strong);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.year-checkbox-item input[type="checkbox"].year-checkbox:checked + label.year-label {
+    background: linear-gradient(145deg, var(--color-accent), var(--color-accent-bright));
+    border-color: var(--color-accent);
+    color: var(--color-text-primary);
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.4);
+    transform: translateY(-2px);
+}
+
+.year-checkbox-item input[type="checkbox"].year-checkbox:checked + label.year-label:hover {
+    background: linear-gradient(145deg, var(--color-accent-bright), var(--color-accent));
+    box-shadow: 0 6px 16px rgba(255, 127, 0, 0.5);
+}
+
+.year-select-all-btn {
+    padding: 10px 20px;
+    background: var(--color-surface-muted);
+    border: 2px solid var(--color-border-strong);
+    border-radius: 8px;
+    color: var(--color-text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+.year-select-all-btn:hover {
+    background: var(--color-border);
+    border-color: var(--color-border-subtle);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.year-select-all-btn:active {
+    transform: translateY(0);
+}
+
+.player-info-label {
+    color: var(--color-text-subtle);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.player-info-value {
+    color: var(--color-accent);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.stats-tables-container {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.stats-section {
+    background: var(--color-surface-alt);
+    border-radius: 8px;
+    padding: 24px;
+}
+
+.stats-section-title {
+    color: var(--color-accent);
+    margin: 0 0 20px 0;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.stats-category-section {
+    margin-bottom: 32px;
+}
+
+.stats-category-title {
+    color: var(--color-accent);
+    margin: 0 0 16px 0;
+    font-size: 18px;
+    font-weight: 600;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.stats-table-wrapper {
+    overflow-x: auto;
+    width: 100%;
+    max-width: 100%;
+    margin-bottom: 16px;
+}
+
+.stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: max-content;
+}
+
+.stats-table thead {
+    background: var(--color-surface);
+}
+
+.stats-table th {
+    padding: 12px 24px 12px 12px;
+    text-align: left;
+    color: var(--color-accent);
+    font-weight: 600;
+    font-size: 14px;
+    border-bottom: 2px solid var(--color-border);
+    position: sticky;
+    top: 0;
+    background: var(--color-surface);
+    cursor: default;
+    user-select: none;
+}
+
+.stats-table th.sortable {
+    cursor: pointer;
+}
+
+.stats-table th.sortable:hover {
+    background: color-mix(in srgb, var(--color-surface) 85%, var(--color-main-bg));
+}
+
+.stats-table th.sortable::after {
+    content: ' ↕';
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.5;
+    font-size: 12px;
+    pointer-events: none;
+}
+
+.stats-table th.sort-asc::after {
+    content: ' ↑';
+    opacity: 1;
+}
+
+.stats-table th.sort-desc::after {
+    content: ' ↓';
+    opacity: 1;
+}
+
+.stats-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--color-surface-muted);
+    color: var(--color-text-secondary);
+    font-size: 13px;
+}
+
+.stats-table tbody tr:hover {
+    background: color-mix(in srgb, var(--color-surface) 85%, var(--color-main-bg));
+}
+
+.stats-table tbody tr:nth-child(even) {
+    background: color-mix(in srgb, var(--color-surface) 75%, var(--color-main-bg));
+}
+
+.empty-state {
+    padding: 60px 20px;
+    background: var(--color-layer-card);
+    border-radius: 16px;
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-elevated);
+    min-height: 600px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.empty-state-content {
+    max-width: 900px;
+    width: 100%;
+    text-align: center;
+}
+
+.empty-state-icon {
+    margin-bottom: 32px;
+}
+
+.icon-circle {
+    width: 120px;
+    height: 120px;
+    margin: 0 auto;
+    background: linear-gradient(135deg, rgba(255, 127, 0, 0.2), rgba(255, 149, 0, 0.1));
+    border: 3px solid rgba(255, 127, 0, 0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse 2s ease-in-out infinite;
+    box-shadow: 0 0 40px rgba(255, 127, 0, 0.2);
+}
+
+.icon-circle i {
+    font-size: 56px;
+    color: var(--color-accent);
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 40px rgba(255, 127, 0, 0.2);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 60px rgba(255, 127, 0, 0.3);
+    }
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+
+.empty-state-title {
+    font-size: 36px;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    margin: 0 0 16px 0;
+    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-bright));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.empty-state-description {
+    font-size: 18px;
+    color: var(--color-text-muted);
+    margin: 0 0 48px 0;
+    line-height: 1.6;
+    max-width: 600px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.empty-state-features {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 24px;
+    margin-bottom: 48px;
+}
+
+.feature-card {
+    background: var(--color-layer-soft);
+    border: 1px solid var(--color-layer-border);
+    border-radius: 12px;
+    padding: 32px 24px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+    box-shadow: var(--shadow-floating);
+}
+
+.feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.5s ease;
+}
+
+.feature-card:hover::before {
+    transform: translateX(100%);
+}
+
+.feature-card:hover {
+    border-color: var(--color-accent);
+    transform: translateY(-5px);
+    box-shadow: 0 8px 24px rgba(255, 127, 0, 0.2);
+}
+
+.feature-icon {
+    width: 60px;
+    height: 60px;
+    margin: 0 auto 20px;
+    background: linear-gradient(135deg, rgba(255, 127, 0, 0.15), rgba(255, 149, 0, 0.1));
+    border: 2px solid rgba(255, 127, 0, 0.3);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.feature-icon i {
+    font-size: 28px;
+    color: var(--color-accent);
+}
+
+.feature-card h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0 0 8px 0;
+}
+
+.feature-card p {
+    font-size: 14px;
+    color: var(--color-text-subtle);
+    margin: 0;
+    line-height: 1.5;
+}
+
+.popular-players {
+    margin-top: 48px;
+    padding-top: 32px;
+    border-top: 1px solid var(--color-border);
+}
+
+.popular-players-label {
+    font-size: 14px;
+    color: var(--color-text-subtle);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 0 0 20px 0;
+    font-weight: 600;
+}
+
+.player-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    align-items: center;
+}
+
+.player-tag {
+    display: inline-block;
+    padding: 10px 20px;
+    background: linear-gradient(145deg, var(--color-surface), color-mix(in srgb, var(--color-surface) 90%, var(--color-main-bg)));
+    border: 2px solid var(--color-border);
+    border-radius: 25px;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.player-tag::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 127, 0, 0.2);
+    transform: translate(-50%, -50%);
+    transition: width 0.4s ease, height 0.4s ease;
+}
+
+.player-tag:hover::before {
+    width: 300px;
+    height: 300px;
+}
+
+.player-tag:hover {
+    border-color: var(--color-accent);
+    color: var(--color-text-primary);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 127, 0, 0.3);
+}
+
+.player-tag:active {
+    transform: translateY(0);
+}
+
+.season-selector {
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 16px;
+    background: var(--color-surface-alt);
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+}
+
+.season-selector > label {
+    color: var(--color-accent);
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+}
+
+.season-checkboxes {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.season-checkbox-item {
+    position: relative;
+}
+
+.season-checkbox-item input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    cursor: pointer;
+    width: 0;
+    height: 0;
+}
+
+.season-checkbox-item label {
+    display: inline-block;
+    padding: 8px 16px;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    margin: 0;
+    user-select: none;
+    transition: all 0.2s ease;
+    min-width: 60px;
+    text-align: center;
+}
+
+.season-checkbox-item label:hover {
+    background: color-mix(in srgb, var(--color-surface) 85%, var(--color-main-bg));
+    border-color: var(--color-border-strong);
+}
+
+.season-checkbox-item input[type="checkbox"]:checked + label {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-main-bg);
+    font-weight: 600;
+}
+
+.season-checkbox-item input[type="checkbox"]:checked + label:hover {
+    background: var(--color-accent-bright);
+    border-color: var(--color-accent-bright);
+}
+
+.select-all-button {
+    padding: 8px 16px;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-left: 8px;
+}
+
+.select-all-button:hover {
+    background: color-mix(in srgb, var(--color-surface) 85%, var(--color-main-bg));
+    border-color: var(--color-border-strong);
+}
+
+.no-data {
+    text-align: center;
+    padding: 40px;
+    color: var(--color-text-subtle);
+    font-style: italic;
+}
+</style>
+
+<script>
+let searchTimeout = null;
+let headerSearchTimeout = null;
+let currentPlayerName = null;
+let availablePlayers = new Set(); // Store available players for validation
+
+function normalizePlayerName(name) {
+    if (!name) return '';
+    return name.normalize("NFD").replace(/\p{Diacritic}/gu, '');
+}
+
+// Search for players (main search)
+async function searchPlayers() {
+    console.log('searchPlayers function called');
+    const searchInput = document.getElementById('playerSearch');
+    if (!searchInput) {
+        console.error('playerSearch element not found in searchPlayers');
+        return;
+    }
+    const searchTerm = searchInput.value.trim();
+    const normalizedTerm = normalizePlayerName(searchTerm);
+    const suggestionsDiv = document.getElementById('searchSuggestions');
+    
+    console.log('Search term:', searchTerm);
+    
+    if (!normalizedTerm || normalizedTerm.length < 2) {
+        if (suggestionsDiv) suggestionsDiv.style.display = 'none';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/csv/search?q=${encodeURIComponent(normalizedTerm)}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        const players = data.players || [];
+        
+        if (players.length === 0) {
+            suggestionsDiv.style.display = 'none';
+            return;
+        }
+        
+        // Store available players
+        availablePlayers.clear();
+        players.forEach(p => availablePlayers.add(normalizePlayerName(p.name).toLowerCase()));
+        
+        // Show suggestions
+        suggestionsDiv.innerHTML = players.slice(0, 10).map((player, idx) => 
+            `<div class="suggestion-item" data-player-name="${player.name.replace(/"/g, '&quot;')}" data-index="${idx}">${player.name}</div>`
+        ).join('');
+        suggestionsDiv.style.display = 'block';
+        
+        // Add click handlers to suggestions
+        suggestionsDiv.querySelectorAll('.suggestion-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const playerName = this.getAttribute('data-player-name');
+                selectPlayer(playerName);
+            });
+        });
+    } catch (error) {
+        console.error('Search error:', error);
+        suggestionsDiv.style.display = 'none';
+    }
+}
+
+// Search for players (header search)
+async function searchPlayersInHeader() {
+    const rawSearchTerm = document.getElementById('playerSearchInHeader').value.trim();
+    const searchTerm = normalizePlayerName(rawSearchTerm);
+    const suggestionsDiv = document.getElementById('headerSearchSuggestions');
+    
+    if (!searchTerm || searchTerm.length < 2) {
+        suggestionsDiv.style.display = 'none';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/csv/search?q=${encodeURIComponent(searchTerm)}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        const players = data.players || [];
+        
+        if (players.length === 0) {
+            suggestionsDiv.innerHTML = '<div class="suggestion-item" style="color: var(--color-text-subtle);">No players found</div>';
+            suggestionsDiv.style.display = 'block';
+            return;
+        }
+        
+        // Store available players for validation
+        availablePlayers.clear();
+        players.forEach(p => availablePlayers.add(normalizePlayerName(p.name).toLowerCase()));
+        
+        // Show suggestions
+        suggestionsDiv.innerHTML = players.slice(0, 10).map((player, idx) => 
+            `<div class="suggestion-item" data-player-name="${player.name.replace(/"/g, '&quot;')}" data-index="${idx}">${player.name}</div>`
+        ).join('');
+        suggestionsDiv.style.display = 'block';
+        
+        // Add click handlers to suggestions
+        suggestionsDiv.querySelectorAll('.suggestion-item').forEach(item => {
+            item.addEventListener('click', function() {
+                const playerName = this.getAttribute('data-player-name');
+                selectPlayer(playerName);
+            });
+        });
+    } catch (error) {
+        console.error('Search error:', error);
+        suggestionsDiv.style.display = 'none';
+    }
+}
+
+// Validate if player name exists exactly
+async function validatePlayerName(playerName) {
+    if (!playerName || !playerName.trim()) {
+        return false;
+    }
+    
+    try {
+        const normalizedName = normalizePlayerName(playerName.trim());
+        const response = await fetch(`/api/csv/search?q=${encodeURIComponent(normalizedName)}`);
+        const data = await response.json();
+        
+        if (data.error || !data.players) {
+            return false;
+        }
+        
+        // Check if exact match exists
+        const exactMatch = data.players.find(p => 
+            normalizePlayerName(p.name).toLowerCase() === normalizedName.toLowerCase()
+        );
+        
+        return !!exactMatch;
+    } catch (error) {
+        console.error('Validation error:', error);
+        return false;
+    }
+}
+
+// Select a player
+window.selectPlayer = function(playerName) {
+    const mainSearch = document.getElementById('playerSearch');
+    const headerSearch = document.getElementById('playerSearchInHeader');
+    if (mainSearch) mainSearch.value = playerName;
+    if (headerSearch) headerSearch.value = playerName;
+    document.getElementById('searchSuggestions').style.display = 'none';
+    document.getElementById('headerSearchSuggestions').style.display = 'none';
+    loadPlayerData(normalizePlayerName(playerName), playerName);
+};
+
+// Load player data
+async function loadPlayerData(playerName, displayName = null) {
+    if (!playerName || !playerName.trim()) {
+        return;
+    }
+    
+    const normalizedName = normalizePlayerName(playerName.trim());
+    if (!normalizedName) {
+        return;
+    }
+
+    currentPlayerName = normalizedName;
+    const effectiveDisplayName = displayName || playerName;
+    
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    const playerDataContainer = document.getElementById('playerDataContainer');
+    const emptyState = document.getElementById('emptyState');
+    
+    loadingIndicator.style.display = 'block';
+    errorMessage.style.display = 'none';
+    errorMessage.textContent = ''; // Clear any previous error messages
+    playerDataContainer.style.display = 'none';
+    emptyState.style.display = 'none';
+    
+    try {
+        const response = await fetch(`/api/csv/player/${encodeURIComponent(normalizedName)}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        // Display player data - update search input with player name
+        const headerSearchInput = document.getElementById('playerSearchInHeader');
+        const mainSearchInput = document.getElementById('playerSearch');
+        const mainSearchContainer = document.querySelector('.search-container');
+        
+        const resolvedName = data.name || effectiveDisplayName;
+        if (headerSearchInput) {
+            headerSearchInput.value = resolvedName;
+        }
+        if (mainSearchInput) {
+            mainSearchInput.value = resolvedName;
+        }
+        
+        // Hide main search container when player data is shown
+        if (mainSearchContainer) {
+            mainSearchContainer.style.display = 'none';
+        }
+        
+        // Store positions data globally for use in fangraphs table and headshot
+        window.positionsData = data.positions || [];
+        // Store fangraphs data globally for use in headshot lookup
+        window.fangraphsData = data.fangraphs || [];
+        
+        // Display Positions data (extracts key info to header, hides table)
+        displayPositionsData(window.positionsData);
+        
+        // Display Dashboard and Fangraphs data
+        displayDashboardAndFangraphsData(data.fangraphs || []);
+        
+        playerDataContainer.style.display = 'block';
+        
+    } catch (error) {
+        errorMessage.textContent = `Error loading player data: ${error.message}`;
+        errorMessage.style.display = 'block';
+        emptyState.style.display = 'block';
+    } finally {
+        loadingIndicator.style.display = 'none';
+    }
+}
+
+// Helper function to extract value from positions data
+function getPositionValue(positionsData, possibleKeys) {
+    if (!positionsData || positionsData.length === 0) return null;
+    
+    // Use first record (assuming data is consistent across records)
+    const firstRecord = positionsData[0];
+    
+    for (const key of possibleKeys) {
+        if (firstRecord[key] !== null && firstRecord[key] !== undefined && firstRecord[key] !== '') {
+            return firstRecord[key];
+        }
+    }
+    return null;
+}
+
+// Categorize stats into logical groups
+function categorizeStats(allKeys, isPitcher = false) {
+    // Define pitcher-specific categories
+    const pitcherCategories = {
+        dashboard: {
+            name: 'Dashboard',
+            keys: ['fg_WAR', 'War', 'WAR', 'war', 'wins_above_replacement', 'Wins Above Replacement']
+        },
+        basic: {
+            name: 'Basic Pitching Stats',
+            keys: ['fg_W', 'W', 'w', 'Wins', 'fg_L', 'L', 'l', 'Losses',
+                   'fg_ERA', 'ERA', 'era', 'Earned Run Average',
+                   'fg_IP', 'IP', 'ip', 'Innings Pitched', 'Innings',
+                   'fg_G', 'G', 'g', 'Games', 'fg_GS', 'GS', 'gs', 'Games Started',
+                   'fg_CG', 'CG', 'cg', 'Complete Games', 'fg_ShO', 'ShO', 'sho', 'Shutouts',
+                   'fg_SV', 'SV', 'sv', 'Saves', 'fg_BS', 'BS', 'bs', 'Blown Saves',
+                   'fg_H', 'H', 'h', 'Hits Allowed', 'fg_R', 'R', 'r', 'Runs Allowed',
+                   'fg_ER', 'ER', 'er', 'Earned Runs', 'fg_HR', 'HR', 'hr', 'Home Runs Allowed',
+                   'fg_BB', 'BB', 'bb', 'Walks', 'fg_IBB', 'IBB', 'ibb', 'Intentional Walks',
+                   'fg_HBP', 'HBP', 'hbp', 'Hit By Pitch', 'fg_WP', 'WP', 'wp', 'Wild Pitches',
+                   'fg_BK', 'BK', 'bk', 'Balks', 'fg_SO', 'SO', 'so', 'Strikeouts', 'K', 'k']
+        },
+        advanced: {
+            name: 'Advanced Pitching Stats',
+            keys: ['fg_WHIP', 'WHIP', 'whip', 'Walks and Hits per Inning Pitched',
+                   'fg_FIP', 'FIP', 'fip', 'Fielding Independent Pitching',
+                   'fg_xFIP', 'xFIP', 'xfip', 'Expected Fielding Independent Pitching',
+                   'fg_SIERA', 'SIERA', 'siera', 'Skill-Interactive ERA',
+                   'fg_ERA-', 'ERA-', 'era-', 'ERA Minus', 'fg_FIP-', 'FIP-', 'fip-', 'FIP Minus',
+                   'fg_xFIP-', 'xFIP-', 'xfip-', 'xFIP Minus',
+                   'fg_BABIP', 'BABIP', 'babip', 'Batting Average on Balls In Play',
+                   'fg_LOB%', 'LOB%', 'lob%', 'Left On Base Percentage',
+                   'fg_GB/FB', 'GB/FB', 'gb/fb', 'Ground Ball to Fly Ball Ratio',
+                   'fg_GB%', 'GB%', 'gb%', 'Ground Ball Percentage',
+                   'fg_FB%', 'FB%', 'fb%', 'Fly Ball Percentage',
+                   'fg_LD%', 'LD%', 'ld%', 'Line Drive Percentage',
+                   'fg_HR/FB', 'HR/FB', 'hr/fb', 'Home Run to Fly Ball Ratio',
+                   'fg_AVG', 'AVG', 'avg', 'Batting Average Against',
+                   'fg_AVG+', 'AVG+', 'avg+', 'AVG Plus']
+        },
+        rateStats: {
+            name: 'Rate Statistics',
+            keys: ['fg_K/9', 'K/9', 'k/9', 'Strikeouts per 9', 'fg_K/9+', 'K/9+', 'k/9+',
+                   'fg_BB/9', 'BB/9', 'bb/9', 'Walks per 9', 'fg_BB/9+', 'BB/9+', 'bb/9+',
+                   'fg_H/9', 'H/9', 'h/9', 'Hits per 9', 'fg_H/9+', 'H/9+', 'h/9+',
+                   'fg_HR/9', 'HR/9', 'hr/9', 'Home Runs per 9', 'fg_HR/9+', 'HR/9+', 'hr/9+',
+                   'fg_K/BB', 'K/BB', 'k/bb', 'Strikeout to Walk Ratio', 'fg_K/BB+', 'K/BB+', 'k/bb+',
+                   'fg_K%', 'K%', 'k%', 'Strikeout Percentage', 'fg_K%+', 'K%+', 'k%+',
+                   'fg_BB%', 'BB%', 'bb%', 'Walk Percentage', 'fg_BB%+', 'BB%+', 'bb%+',
+                   'fg_K-BB%', 'K-BB%', 'k-bb%', 'Strikeout Minus Walk Percentage']
+        },
+        pitchMix: {
+            name: 'Pitch Mix & Velocity',
+            keys: ['fg_FB%', 'FB%', 'fb%', 'Fastball Percentage',
+                   'fg_FBv', 'FBv', 'fbv', 'Fastball Velocity',
+                   'fg_SL%', 'SL%', 'sl%', 'Slider Percentage',
+                   'fg_SLv', 'SLv', 'slv', 'Slider Velocity',
+                   'fg_CT%', 'CT%', 'ct%', 'Cutter Percentage',
+                   'fg_CTv', 'CTv', 'ctv', 'Cutter Velocity',
+                   'fg_CB%', 'CB%', 'cb%', 'Curveball Percentage',
+                   'fg_CBv', 'CBv', 'cbv', 'Curveball Velocity',
+                   'fg_CH%', 'CH%', 'ch%', 'Changeup Percentage',
+                   'fg_CHv', 'CHv', 'chv', 'Changeup Velocity',
+                   'fg_SF%', 'SF%', 'sf%', 'Split-Finger Percentage',
+                   'fg_SFv', 'SFv', 'sfv', 'Split-Finger Velocity',
+                   'fg_KN%', 'KN%', 'kn%', 'Knuckleball Percentage',
+                   'fg_KNv', 'KNv', 'knv', 'Knuckleball Velocity']
+        },
+        pitchValue: {
+            name: 'Pitch Values',
+            keys: ['fg_wFB', 'wFB', 'wfb', 'Fastball Value',
+                   'fg_wSL', 'wSL', 'wsl', 'Slider Value',
+                   'fg_wCT', 'wCT', 'wct', 'Cutter Value',
+                   'fg_wCB', 'wCB', 'wcb', 'Curveball Value',
+                   'fg_wCH', 'wCH', 'wch', 'Changeup Value',
+                   'fg_wSF', 'wSF', 'wsf', 'Split-Finger Value',
+                   'fg_wKN', 'wKN', 'wkn', 'Knuckleball Value',
+                   'fg_wFB/C', 'wFB/C', 'wfb/c', 'Fastball Value per 100',
+                   'fg_wSL/C', 'wSL/C', 'wsl/c', 'Slider Value per 100',
+                   'fg_wCT/C', 'wCT/C', 'wct/c', 'Cutter Value per 100',
+                   'fg_wCB/C', 'wCB/C', 'wcb/c', 'Curveball Value per 100',
+                   'fg_wCH/C', 'wCH/C', 'wch/c', 'Changeup Value per 100',
+                   'fg_wSF/C', 'wSF/C', 'wsf/c', 'Split-Finger Value per 100',
+                   'fg_wKN/C', 'wKN/C', 'wkn/c', 'Knuckleball Value per 100']
+        },
+        plateDiscipline: {
+            name: 'Plate Discipline',
+            keys: ['fg_O-Swing%', 'O-Swing%', 'o-swing%', 'Outside Swing Percentage',
+                   'fg_Z-Swing%', 'Z-Swing%', 'z-swing%', 'Zone Swing Percentage',
+                   'fg_Swing%', 'Swing%', 'swing%', 'Swing Percentage',
+                   'fg_O-Contact%', 'O-Contact%', 'o-contact%', 'Outside Contact Percentage',
+                   'fg_Z-Contact%', 'Z-Contact%', 'z-contact%', 'Zone Contact Percentage',
+                   'fg_Contact%', 'Contact%', 'contact%', 'Contact Percentage',
+                   'fg_Zone%', 'Zone%', 'zone%', 'Zone Percentage',
+                   'fg_F-Strike%', 'F-Strike%', 'f-strike%', 'First Strike Percentage',
+                   'fg_SwStr%', 'SwStr%', 'swstr%', 'Swinging Strike Percentage']
+        },
+        situational: {
+            name: 'Situational & Clutch Stats',
+            keys: ['fg_WPA', 'WPA', 'wpa', 'Win Probability Added',
+                   'fg_-WPA', '-WPA', '-wpa', 'Negative WPA',
+                   'fg_+WPA', '+WPA', '+wpa', 'Positive WPA',
+                   'fg_RE24', 'RE24', 're24', 'Run Expectancy',
+                   'fg_REW', 'REW', 'rew', 'Run Expectancy Wins',
+                   'fg_Clutch', 'Clutch', 'clutch', 'Clutch Rating',
+                   'fg_RS/9', 'RS/9', 'rs/9', 'Run Support per 9']
+        },
+        other: {
+            name: 'Other Stats',
+            keys: ['fg_Age', 'Age', 'age', 'Player Age',
+                   'fg_Team', 'Team', 'team', 'Team',
+                   'fg_TBF', 'TBF', 'tbf', 'Total Batters Faced',
+                   'fg_Pitches', 'Pitches', 'pitches', 'Total Pitches',
+                   'fg_Balls', 'Balls', 'balls', 'Total Balls',
+                   'fg_Strikes', 'Strikes', 'strikes', 'Total Strikes',
+                   'fg_Starting', 'Starting', 'starting', 'Games as Starter',
+                   'fg_Start-IP', 'Start-IP', 'start-ip', 'Innings as Starter',
+                   'fg_Relieving', 'Relieving', 'relieving', 'Games as Reliever',
+                   'fg_Relief-IP', 'Relief-IP', 'relief-ip', 'Innings as Reliever',
+                   'fg_RAR', 'RAR', 'rar', 'Runs Above Replacement',
+                   'fg_Dollars', 'Dollars', 'dollars', 'Dollar Value',
+                   'fg_Pace', 'Pace', 'pace', 'Pace']
+        }
+    };
+    
+    // Define hitter categories (original)
+    const hitterCategories = {
+        basic: {
+            name: 'Basic Hitting Stats',
+            keys: ['Ab', 'AB', 'ab', 'at_bats', 'At Bats', '1b', '1B', 'singles', 'Singles', 
+                   '2b', '2B', 'doubles', 'Doubles', '3b', '3B', 'triples', 'Triples',
+                   'H', 'h', 'hits', 'Hits', 'HR', 'hr', 'home_runs', 'Home Runs',
+                   'R', 'r', 'runs', 'Runs', 'RBI', 'rbi', 'Runs Batted In',
+                   'Avg', 'AVG', 'avg', 'batting_average', 'Batting Average',
+                   'Avg+', 'AVG+', 'avg+', 'AVG_plus', 'Batting Average+']
+        },
+        dashboard: {
+            name: 'Dashboard',
+            keys: ['War', 'WAR', 'war', 'wins_above_replacement', 'Wins Above Replacement']
+        },
+        advanced: {
+            name: 'Advanced Hitting Stats',
+            keys: ['Xslg', 'XSLG', 'xslg', 'expected_slugging', 'Expected Slugging',
+                   'Xwoba', 'XWOBA', 'xwoba', 'expected_woba', 'Expected WOBA',
+                   'Babip', 'BABIP', 'babip', 'batting_average_balls_in_play', 'BABIP',
+                   'Babip+', 'BABIP+', 'babip+', 'BABIP_plus', 'BABIP+',
+                   'Barrel%', 'barrel%', 'Barrel_Percent', 'Barrel Rate',
+                   'Barrels', 'barrels', 'Barrel Count',
+                   'Maxev', 'MaxEv', 'MAXEV', 'maxev', 'max_ev', 'Max Exit Velocity', 'Maximum Exit Velocity',
+                   'Slg', 'SLG', 'slg', 'slugging', 'Slugging Percentage',
+                   'Slg+', 'SLG+', 'slg+', 'SLG_plus', 'Slugging+',
+                   'Obp', 'OBP', 'obp', 'on_base_percentage', 'On Base Percentage',
+                   'Obp+', 'OBP+', 'obp+', 'OBP_plus', 'On Base+',
+                   'Ops', 'OPS', 'ops', 'on_base_plus_slugging', 'OPS',
+                   'Ops+', 'OPS+', 'ops+', 'OPS_plus', 'OPS+',
+                   'Iso', 'ISO', 'iso', 'isolated_power', 'Isolated Power',
+                   'Wrc', 'WRC', 'wrc', 'weighted_runs_created', 'Weighted Runs Created',
+                   'Wrc+', 'WRC+', 'wrc+', 'WRC_plus', 'WRC+',
+                   'Woba', 'WOBA', 'woba', 'weighted_on_base_average', 'WOBA']
+        },
+        plateDiscipline: {
+            name: 'Plate Discipline & Walks',
+            keys: ['Bb', 'BB', 'bb', 'walks', 'Walks', 'Bases on Balls',
+                   'Bb%', 'BB%', 'bb%', 'BB_Percent', 'Walk Rate',
+                   'Bb%+', 'BB%+', 'bb%+', 'BB_Percent_Plus', 'Walk Rate+',
+                   'Bb/k', 'BB/K', 'bb/k', 'BB_per_K', 'Walks per Strikeout',
+                   'Balls', 'balls', 'Total Balls',
+                   'Cb%', 'CB%', 'cb%', 'Called_Ball_Percent', 'Called Ball Rate',
+                   'Cbv', 'CBV', 'cbv', 'Called_Ball_Value',
+                   'K%', 'k%', 'K_Percent', 'Strikeout Rate',
+                   'K%+', 'k%+', 'K_Percent_Plus', 'Strikeout Rate+',
+                   'SO', 'so', 'Strikeouts', 'K', 'k']
+        },
+        situational: {
+            name: 'Situational & Clutch Stats',
+            keys: ['+wpa', '+WPA', 'wpa_plus', 'Win Probability Added Positive',
+                   '-wpa', '-WPA', 'wpa_minus', 'Win Probability Added Negative',
+                   'Wpa', 'WPA', 'wpa', 'win_probability_added', 'Win Probability Added',
+                   'Clutch', 'clutch', 'Clutch Rating',
+                   'RE24', 're24', 'Run Expectancy']
+        },
+        baserunning: {
+            name: 'Baserunning',
+            keys: ['Bsr', 'BSR', 'bsr', 'baserunning', 'Base Running',
+                   'SB', 'sb', 'stolen_bases', 'Stolen Bases',
+                   'CS', 'cs', 'caught_stealing', 'Caught Stealing',
+                   'SB%', 'sb%', 'SB_Percent', 'Stolen Base Success Rate']
+        },
+        contact: {
+            name: 'Contact & Approach',
+            keys: ['Contact%', 'contact%', 'Contact_Percent', 'Contact Rate',
+                   'Swing%', 'swing%', 'Swing_Percent', 'Swing Rate',
+                   'O-Swing%', 'o-swing%', 'OSwing%', 'Outside_Swing_Percent', 'Outside Swing Rate',
+                   'Z-Swing%', 'z-swing%', 'ZSwing%', 'Inside_Swing_Percent', 'Inside Swing Rate',
+                   'O-Contact%', 'o-contact%', 'OContact%', 'Outside_Contact_Percent',
+                   'Z-Contact%', 'z-contact%', 'ZContact%', 'Inside_Contact_Percent',
+                   'SwStr%', 'swstr%', 'Swinging_Strike_Percent', 'Swinging Strike Rate']
+        },
+        other: {
+            name: 'Other Stats',
+            keys: ['Age', 'age', 'Player Age',
+                   'Age Rng', 'age_rng', 'Age Range',
+                   'Bu', 'bu', 'Bunts',
+                   'Buh', 'buh', 'Bunt Hits',
+                   'Buh%', 'buh%', 'Bunt_Hit_Percent', 'Bunt Hit Rate',
+                   'Bat', 'bat', 'Batting',
+                   'Ch', 'ch', 'Chase',
+                   'G', 'g', 'games', 'Games',
+                   'PA', 'pa', 'plate_appearances', 'Plate Appearances']
+        }
+    };
+    
+    // Use pitcher or hitter categories based on player type
+    const categories = isPitcher ? pitcherCategories : hitterCategories;
+    
+    // Categorize all keys
+    const categorized = {};
+    const uncategorized = [];
+    
+    allKeys.forEach(key => {
+        let found = false;
+        const keyLower = key.toLowerCase();
+        let bestMatch = null;
+        let bestMatchCategory = null;
+        let bestMatchType = null; // 'exact', 'contains', 'contained'
+        
+        // Try each category - find best match
+        for (const [catKey, cat] of Object.entries(categories)) {
+            for (const catKeyPattern of cat.keys) {
+                const patternLower = catKeyPattern.toLowerCase();
+                
+                // Exact match (highest priority)
+                if (keyLower === patternLower) {
+                    bestMatch = key;
+                    bestMatchCategory = catKey;
+                    bestMatchType = 'exact';
+                    found = true;
+                    break; // Exact match found, use it
+                }
+                
+                // Key contains pattern (e.g., "BB%" contains "bb")
+                if (!bestMatch || bestMatchType === 'contained') {
+                    if (keyLower.includes(patternLower) && patternLower.length >= 2) {
+                        bestMatch = key;
+                        bestMatchCategory = catKey;
+                        bestMatchType = 'contains';
+                        found = true;
+                    }
+                }
+                
+                // Pattern contains key (e.g., "Walks" contains "bb" if key is "BB")
+                if (!bestMatch) {
+                    if (patternLower.includes(keyLower) && keyLower.length >= 2) {
+                        bestMatch = key;
+                        bestMatchCategory = catKey;
+                        bestMatchType = 'contained';
+                        found = true;
+                    }
+                }
+            }
+            
+            // If exact match found, stop searching
+            if (bestMatchType === 'exact') break;
+        }
+        
+        if (found && bestMatchCategory) {
+            if (!categorized[bestMatchCategory]) {
+                categorized[bestMatchCategory] = [];
+            }
+            categorized[bestMatchCategory].push(key);
+        } else {
+            uncategorized.push(key);
+        }
+    });
+    
+    // Add uncategorized to "other"
+    if (uncategorized.length > 0) {
+        if (!categorized.other) {
+            categorized.other = [];
+        }
+        categorized.other.push(...uncategorized);
+    }
+    
+    // Return categories with their names and sorted keys
+    const result = [];
+    for (const [catKey, cat] of Object.entries(categories)) {
+        if (categorized[catKey] && categorized[catKey].length > 0) {
+            let sortedKeys = categorized[catKey].sort();
+            
+            // Special handling: prioritize key stats in Advanced category
+            if (catKey === 'advanced') {
+                const priorityKeys = [];
+                const otherKeys = [];
+                
+                sortedKeys.forEach(key => {
+                    const keyLower = key.toLowerCase();
+                    if (isPitcher) {
+                        // For pitchers, prioritize ERA, FIP, WHIP, xFIP
+                        if (keyLower.includes('era') && !keyLower.includes('era-') && !keyLower.includes('era+')) {
+                            priorityKeys.push(key);
+                        } else if (keyLower === 'fip' || keyLower.startsWith('fip')) {
+                            priorityKeys.push(key);
+                        } else if (keyLower === 'whip' || keyLower.startsWith('whip')) {
+                            priorityKeys.push(key);
+                        } else if (keyLower === 'xfip' || keyLower.startsWith('xfip')) {
+                            priorityKeys.push(key);
+                        } else {
+                            otherKeys.push(key);
+                        }
+                    } else {
+                        // For hitters, prioritize Xslg and Xwoba
+                        if (keyLower === 'xslg' || keyLower.startsWith('xslg')) {
+                            priorityKeys.push(key);
+                        } else if (keyLower === 'xwoba' || keyLower.startsWith('xwoba')) {
+                            priorityKeys.push(key);
+                        } else {
+                            otherKeys.push(key);
+                        }
+                    }
+                });
+                
+                // Sort priority keys appropriately
+                if (isPitcher) {
+                    priorityKeys.sort((a, b) => {
+                        const aLower = a.toLowerCase();
+                        const bLower = b.toLowerCase();
+                        const order = ['era', 'fip', 'whip', 'xfip'];
+                        const aIndex = order.findIndex(o => aLower.includes(o));
+                        const bIndex = order.findIndex(o => bLower.includes(o));
+                        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+                        if (aIndex !== -1) return -1;
+                        if (bIndex !== -1) return 1;
+                        return 0;
+                    });
+                } else {
+                    priorityKeys.sort((a, b) => {
+                        const aLower = a.toLowerCase();
+                        const bLower = b.toLowerCase();
+                        if (aLower.startsWith('xslg') && bLower.startsWith('xwoba')) return -1;
+                        if (aLower.startsWith('xwoba') && bLower.startsWith('xslg')) return 1;
+                        return 0;
+                    });
+                }
+                
+                sortedKeys = [...priorityKeys, ...otherKeys];
+            }
+            
+            // Special handling: prioritize key stats in Basic category
+            if (catKey === 'basic') {
+                const priorityKeys = [];
+                const otherKeys = [];
+                
+                sortedKeys.forEach(key => {
+                    const keyLower = key.toLowerCase();
+                    if (isPitcher) {
+                        // For pitchers, prioritize W, L, ERA, IP, SO
+                        if (keyLower === 'w' || keyLower === 'fg_w' || keyLower.startsWith('wins')) {
+                            priorityKeys.push(key);
+                        } else if (keyLower === 'l' || keyLower === 'fg_l' || keyLower.startsWith('losses')) {
+                            priorityKeys.push(key);
+                        } else if (keyLower === 'era' || keyLower === 'fg_era' || keyLower.startsWith('earned run average')) {
+                            priorityKeys.push(key);
+                        } else if (keyLower === 'ip' || keyLower === 'fg_ip' || keyLower.startsWith('innings')) {
+                            priorityKeys.push(key);
+                        } else if (keyLower === 'so' || keyLower === 'fg_so' || keyLower === 'k' || keyLower.startsWith('strikeouts')) {
+                            priorityKeys.push(key);
+                        } else {
+                            otherKeys.push(key);
+                        }
+                    } else {
+                        // For hitters, prioritize HR and RBI
+                        if (keyLower === 'hr' || keyLower === 'home_runs' || keyLower === 'home runs' || 
+                            (keyLower.startsWith('hr') && !keyLower.includes('hr/fb'))) {
+                            priorityKeys.push(key);
+                        } else if (keyLower === 'rbi' || keyLower === 'runs_batted_in' || keyLower === 'runs batted in') {
+                            priorityKeys.push(key);
+                        } else {
+                            otherKeys.push(key);
+                        }
+                    }
+                });
+                
+                // Sort priority keys appropriately
+                if (isPitcher) {
+                    priorityKeys.sort((a, b) => {
+                        const aLower = a.toLowerCase();
+                        const bLower = b.toLowerCase();
+                        const order = ['w', 'l', 'era', 'ip', 'so', 'k'];
+                        const aIndex = order.findIndex(o => aLower.includes(o) && (aLower === o || aLower.startsWith(o + '_') || aLower.startsWith('fg_' + o)));
+                        const bIndex = order.findIndex(o => bLower.includes(o) && (bLower === o || bLower.startsWith(o + '_') || bLower.startsWith('fg_' + o)));
+                        if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+                        if (aIndex !== -1) return -1;
+                        if (bIndex !== -1) return 1;
+                        return 0;
+                    });
+                } else {
+                    // Sort priority keys: HR first, then RBI
+                    priorityKeys.sort((a, b) => {
+                        const aLower = a.toLowerCase();
+                        const bLower = b.toLowerCase();
+                        if ((aLower === 'hr' || aLower.startsWith('hr')) && 
+                            (bLower === 'rbi' || bLower.startsWith('rbi'))) return -1;
+                        if ((aLower === 'rbi' || aLower.startsWith('rbi')) && 
+                            (bLower === 'hr' || bLower.startsWith('hr'))) return 1;
+                        return 0;
+                    });
+                }
+                
+                sortedKeys = [...priorityKeys, ...otherKeys];
+            }
+            
+            result.push({
+                key: catKey,
+                name: cat.name,
+                keys: sortedKeys
+            });
+        }
+    }
+    
+    return result;
+}
+
+// Display Dashboard and Fangraphs data
+function displayDashboardAndFangraphsData(data) {
+    const dashboardContainer = document.getElementById('dashboardTable');
+    const fangraphsContainer = document.getElementById('fangraphsTable');
+    
+    if (!data || data.length === 0) {
+        dashboardContainer.innerHTML = '<div class="no-data">No FanGraphs data available</div>';
+        fangraphsContainer.innerHTML = '<div class="no-data">No FanGraphs data available</div>';
+        return;
+    }
+    
+    // Get positions data for name, team, position columns
+    const positionsData = window.positionsData || [];
+    
+    // Extract player info
+    const playerName = getPositionValue(positionsData, ['Player Name', 'player_name', 'name', 'Name', 'PLAYER_NAME']);
+    const teamName = getPositionValue(positionsData, ['Team Name', 'team_name', 'Team', 'TEAM_NAME', 'team']);
+    const positionName = getPositionValue(positionsData, ['Position Name', 'position_name', 'Position', 'POSITION_NAME', 'position', 'Pos']);
+    
+    // Build transposed table (years as rows, stats as columns)
+    const displayData = data.sort((a, b) => (b.Season || 0) - (a.Season || 0)); // Sort by season descending
+    
+    // Group by season
+    const seasons = [...new Set(data.map(row => row.Season).filter(s => s))].sort((a, b) => b - a); // Descending order
+    
+    // Store original data for filtering
+    window.fangraphsData = data;
+    window.fangraphsSeasons = seasons;
+    
+    // Build and display year selector
+    buildYearSelector(seasons);
+    
+    // Build season selector with checkboxes (shared for both tables)
+    let seasonSelectorHtml = '';
+    
+    // Group data by season - ensure all seasons have an entry (even if empty)
+    const dataBySeason = {};
+    seasons.forEach(season => {
+        const seasonData = displayData.find(row => row.Season == season);
+        dataBySeason[season] = seasonData || {};
+    });
+    
+    // Get all unique stat keys from all rows
+    const allKeys = new Set();
+    displayData.forEach(row => {
+        Object.keys(row).forEach(key => {
+            if (key !== 'Season' && key !== 'Name' && row[key] !== null && row[key] !== '') {
+                allKeys.add(key);
+            }
+        });
+    });
+    
+    // Check if player is a pitcher (needed for categorization)
+    const isPitcher = positionName && (
+        positionName.toLowerCase().includes('pitcher') || 
+        positionName.toLowerCase().includes('p') ||
+        positionName === 'P'
+    );
+    
+    // Categorize stats (pass pitcher status)
+    const categories = categorizeStats(Array.from(allKeys), isPitcher);
+    
+    // Separate dashboard category from other categories
+    const dashboardCategory = categories.find(cat => cat.key === 'dashboard');
+    const otherCategories = categories.filter(cat => cat.key !== 'dashboard');
+    
+    // Build Dashboard table with specific columns
+    let dashboardHtml = seasonSelectorHtml;
+    
+    // isPitcher is already defined above for categorization
+    
+    // Define dashboard columns based on player type
+    let dashboardColumns;
+    if (isPitcher) {
+        // Pitcher-specific dashboard columns
+        dashboardColumns = [
+            { key: 'Year', label: 'Year', getValue: (row, season) => season },
+            { key: 'Player Name', label: 'Name', getValue: (row) => playerName },
+            { key: 'Team', label: 'Team', getValue: (row) => findValueInRow(row, ['fg_Team', 'Team', 'team', 'TEAM']) || teamName },
+            { key: 'Age', label: 'Age', getValue: (row) => findValueInRow(row, ['fg_Age', 'Age', 'age']) },
+            { key: 'Position', label: 'Position', getValue: (row) => positionName },
+            { key: 'WAR', label: 'WAR', getValue: (row) => findValueInRow(row, ['fg_WAR', 'War', 'WAR', 'war']) },
+            { key: 'W', label: 'W', getValue: (row) => findValueInRow(row, ['fg_W', 'W', 'w', 'Wins']) },
+            { key: 'L', label: 'L', getValue: (row) => findValueInRow(row, ['fg_L', 'L', 'l', 'Losses']) },
+            { key: 'ERA', label: 'ERA', getValue: (row) => findValueInRow(row, ['fg_ERA', 'ERA', 'era']) },
+            { key: 'IP', label: 'IP', getValue: (row) => findValueInRow(row, ['fg_IP', 'IP', 'ip', 'Innings Pitched']) },
+            { key: 'K/9', label: 'K/9', getValue: (row) => findValueInRow(row, ['fg_K/9', 'K/9', 'k/9', 'K/9+']) },
+            { key: 'BB/9', label: 'BB/9', getValue: (row) => findValueInRow(row, ['fg_BB/9', 'BB/9', 'bb/9', 'BB/9+']) },
+            { key: 'WHIP', label: 'WHIP', getValue: (row) => findValueInRow(row, ['fg_WHIP', 'WHIP', 'whip']) },
+            { key: 'FIP', label: 'FIP', getValue: (row) => findValueInRow(row, ['fg_FIP', 'FIP', 'fip']) },
+            { key: 'K%', label: 'K%', getValue: (row) => findValueInRow(row, ['fg_K%', 'K%', 'k%', 'K%+']) },
+            { key: 'BB%', label: 'BB%', getValue: (row) => findValueInRow(row, ['fg_BB%', 'BB%', 'bb%', 'BB%+']) }
+        ];
+    } else {
+        // Hitter-specific dashboard columns (original)
+        dashboardColumns = [
+            { key: 'Year', label: 'Year', getValue: (row, season) => season },
+            { key: 'Player Name', label: 'Name', getValue: (row) => playerName },
+            { key: 'Team', label: 'Team', getValue: (row) => findValueInRow(row, ['Team', 'fg_Team', 'team', 'TEAM']) || teamName },
+            { key: 'Age', label: 'Age', getValue: (row) => findValueInRow(row, ['Age', 'age']) },
+            { key: 'Position', label: 'Position', getValue: (row) => positionName },
+            { key: 'WAR', label: 'WAR', getValue: (row) => findValueInRow(row, ['War', 'WAR', 'war']) },
+            { key: 'PA', label: 'PA', getValue: (row) => findValueInRow(row, ['PA', 'pa', 'plate_appearances', 'Plate Appearances', 'fg_PA']) },
+            { key: 'HR', label: 'HR', getValue: (row) => findValueInRow(row, ['HR', 'hr', 'home_runs', 'Home Runs']) },
+            { key: 'RBI', label: 'RBI', getValue: (row) => findValueInRow(row, ['RBI', 'rbi', 'Runs Batted In']) },
+            { key: 'AVG', label: 'AVG', getValue: (row) => findValueInRow(row, ['Avg', 'AVG', 'avg', 'batting_average']) },
+            { key: 'xwOBA', label: 'xwOBA', getValue: (row) => findValueInRow(row, ['Xwoba', 'XWOBA', 'xwoba', 'expected_woba']) },
+            { key: 'xSLG', label: 'xSLG', getValue: (row) => findValueInRow(row, ['Xslg', 'XSLG', 'xslg', 'expected_slugging']) },
+            { key: 'wRC+', label: 'wRC+', getValue: (row) => findValueInRow(row, ['Wrc+', 'WRC+', 'wrc+', 'WRC_plus']) },
+            { key: 'Def', label: 'Def', getValue: (row) => findValueInRow(row, ['Def', 'DEF', 'def', 'defense', 'Defense']) },
+            { key: 'BsR', label: 'BsR', getValue: (row) => findValueInRow(row, ['Bsr', 'BSR', 'bsr', 'baserunning']) }
+        ];
+    }
+    
+    // Helper function to find value in row by multiple possible keys
+    function findValueInRow(row, possibleKeys) {
+        if (!row || typeof row !== 'object') return null;
+        
+        // First try exact matches
+        for (const key of possibleKeys) {
+            if (row.hasOwnProperty(key) && row[key] !== null && row[key] !== undefined && row[key] !== '') {
+                return row[key];
+            }
+        }
+        
+        // Then try case-insensitive matching
+        const rowKeys = Object.keys(row);
+        for (const searchKey of possibleKeys) {
+            const searchLower = searchKey.toLowerCase();
+            for (const rowKey of rowKeys) {
+                const rowKeyLower = rowKey.toLowerCase();
+                // Exact match (case-insensitive)
+                if (rowKeyLower === searchLower) {
+                    if (row[rowKey] !== null && row[rowKey] !== undefined && row[rowKey] !== '') {
+                        return row[rowKey];
+                    }
+                }
+                // Contains match (e.g., "HR" in "home_runs", "woba" in "xwoba")
+                if (searchLower.length >= 2 && rowKeyLower.includes(searchLower)) {
+                    // Avoid partial matches for HR that might match "Hr/fb" or "Hr%"
+                    if (searchKey === 'HR' && (rowKeyLower.includes('hr/fb') || rowKeyLower.includes('hr%'))) continue;
+                    // For RBI, avoid matching unrelated fields
+                    if (searchKey === 'RBI' && rowKeyLower.includes('hr/fb')) continue;
+                    
+                    if (row[rowKey] !== null && row[rowKey] !== undefined && row[rowKey] !== '') {
+                        return row[rowKey];
+                    }
+                }
+            }
+        }
+        
+        return null;
+    }
+    
+    dashboardHtml += `<div class="stats-category-section">`;
+    dashboardHtml += '<div class="stats-table-wrapper">';
+    dashboardHtml += '<table class="stats-table">';
+    dashboardHtml += '<thead><tr>';
+    
+    // Build header row
+    dashboardColumns.forEach(col => {
+        dashboardHtml += `<th class="sortable" data-column="${col.key}" onclick="sortTable(this, 'dashboard')">${col.label}</th>`;
+    });
+    
+    dashboardHtml += '</tr></thead><tbody>';
+    
+    // Create rows for ALL seasons (same length)
+    seasons.forEach(season => {
+        const row = dataBySeason[season];
+        dashboardHtml += `<tr data-season="${season}" data-category="dashboard">`;
+        
+        // Build data cells in order
+        dashboardColumns.forEach(col => {
+            let value = col.getValue(row, season);
+            
+            // Special handling for Age - try to get from row or calculate if needed
+            if (col.key === 'Age' && !value && row) {
+                // Try additional Age keys (including pitcher-specific)
+                value = findValueInRow(row, ['fg_Age', 'Age Rng', 'age_rng', 'AgeRng', 'Age', 'age']);
+                // If still no value, you could calculate from season and birth date here
+            }
+            
+            dashboardHtml += `<td>${formatValue(value)}</td>`;
+        });
+        
+        dashboardHtml += '</tr>';
+    });
+    
+    dashboardHtml += '</tbody></table>';
+    dashboardHtml += '</div>';
+    dashboardHtml += `</div>`;
+    
+    dashboardContainer.innerHTML = dashboardHtml;
+    
+    // Build Fangraphs tables (all other categories)
+    let fangraphsHtml = seasonSelectorHtml;
+    
+    // Create a table for each category (excluding dashboard)
+    otherCategories.forEach((category, index) => {
+        const isFirstTable = index === 0;
+        
+        fangraphsHtml += `<div class="stats-category-section">`;
+        fangraphsHtml += `<h4 class="stats-category-title">${category.name}</h4>`;
+        fangraphsHtml += '<div class="stats-table-wrapper">';
+        fangraphsHtml += '<table class="stats-table">';
+        fangraphsHtml += '<thead><tr>';
+        fangraphsHtml += `<th class="sortable" data-column="Year" onclick="sortTable(this, '${category.key}')">Year</th>`;
+        
+        // Add name, team, position columns (only position on first table)
+        if (playerName) fangraphsHtml += `<th class="sortable" data-column="Player Name" onclick="sortTable(this, '${category.key}')">Player Name</th>`;
+        if (teamName) fangraphsHtml += `<th class="sortable" data-column="Team" onclick="sortTable(this, '${category.key}')">Team</th>`;
+        if (positionName && isFirstTable) fangraphsHtml += `<th class="sortable" data-column="Position" onclick="sortTable(this, '${category.key}')">Position</th>`;
+        
+        // Add stat columns for this category
+        category.keys.forEach(key => {
+            fangraphsHtml += `<th class="sortable" data-column="${key}" onclick="sortTable(this, '${category.key}')">${formatStatName(key)}</th>`;
+        });
+        fangraphsHtml += '</tr></thead><tbody>';
+        
+        // Create rows for ALL seasons (same length across all tables)
+        seasons.forEach(season => {
+            const row = dataBySeason[season];
+            fangraphsHtml += `<tr data-season="${season}" data-category="${category.key}">`;
+            fangraphsHtml += `<td><strong>${season}</strong></td>`;
+            
+            // Add name, team, position cells (only position on first table)
+            // Get team from row data for this specific season, fall back to teamName
+            const seasonTeam = row ? (findValueInRow(row, ['Team', 'fg_Team', 'team', 'TEAM']) || teamName) : teamName;
+            if (playerName) fangraphsHtml += `<td>${formatValue(playerName)}</td>`;
+            if (teamName) fangraphsHtml += `<td>${formatValue(seasonTeam)}</td>`;
+            if (positionName && isFirstTable) fangraphsHtml += `<td>${formatValue(positionName)}</td>`;
+            
+            // Add stat cells for this category
+            category.keys.forEach(key => {
+                const value = row ? row[key] : null;
+                fangraphsHtml += `<td>${formatValue(value)}</td>`;
+            });
+            fangraphsHtml += '</tr>';
+        });
+        
+        fangraphsHtml += '</tbody></table>';
+        fangraphsHtml += '</div>';
+        fangraphsHtml += `</div>`;
+    });
+    
+    if (otherCategories.length === 0) {
+        fangraphsHtml += '<div class="no-data">No FanGraphs statistics available</div>';
+    }
+    
+    fangraphsContainer.innerHTML = fangraphsHtml;
+    
+    // Update Select All button text based on initial state
+    const selectAllButton = document.querySelector('.select-all-button');
+    if (selectAllButton && window.fangraphsSeasons) {
+        const allChecked = window.fangraphsSeasons.every(season => {
+            const checkbox = document.getElementById(`season-${season}`);
+            return checkbox && checkbox.checked;
+        });
+        selectAllButton.textContent = allChecked ? 'Deselect All' : 'Select All';
+    }
+}
+
+// Toggle all seasons on/off
+window.toggleAllSeasons = function() {
+    if (!window.fangraphsSeasons) return;
+    
+    const button = document.querySelector('.select-all-button');
+    const allChecked = window.fangraphsSeasons.every(season => {
+        const checkbox = document.getElementById(`season-${season}`);
+        return checkbox && checkbox.checked;
+    });
+    
+    // Toggle all checkboxes
+    window.fangraphsSeasons.forEach(season => {
+        const checkbox = document.getElementById(`season-${season}`);
+        if (checkbox) {
+            checkbox.checked = !allChecked;
+        }
+    });
+    
+    // Update button text
+    if (button) {
+        button.textContent = allChecked ? 'Select All' : 'Deselect All';
+    }
+    
+    // Trigger filter
+    filterFangraphsBySeason();
+};
+
+// Sort table by column
+window.sortTable = function(header, category) {
+    const table = header.closest('table');
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    const columnIndex = Array.from(header.parentElement.children).indexOf(header);
+    const columnName = header.getAttribute('data-column');
+    
+    // Get current sort direction
+    const isAsc = header.classList.contains('sort-asc');
+    
+    // Remove sort classes from all headers in this table
+    table.querySelectorAll('th').forEach(th => {
+        th.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // Add sort class to clicked header
+    if (isAsc) {
+        header.classList.add('sort-desc');
+    } else {
+        header.classList.add('sort-asc');
+    }
+    
+    // Sort rows
+    rows.sort((a, b) => {
+        const aCell = a.children[columnIndex];
+        const bCell = b.children[columnIndex];
+        
+        if (!aCell || !bCell) return 0;
+        
+        let aValue = aCell.textContent.trim();
+        let bValue = bCell.textContent.trim();
+        
+        // Handle numeric values
+        const aNum = parseFloat(aValue.replace(/[^0-9.-]/g, ''));
+        const bNum = parseFloat(bValue.replace(/[^0-9.-]/g, ''));
+        
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+            // Both are numbers
+            return isAsc ? aNum - bNum : bNum - aNum;
+        } else {
+            // String comparison
+            if (isAsc) {
+                return aValue.localeCompare(bValue);
+            } else {
+                return bValue.localeCompare(aValue);
+            }
+        }
+    });
+    
+    // Re-append sorted rows
+    rows.forEach(row => tbody.appendChild(row));
+};
+
+// Filter Fangraphs by season
+// Build year selector with checkboxes
+function buildYearSelector(seasons) {
+    const yearSelector = document.getElementById('yearSelector');
+    if (!yearSelector || !seasons || seasons.length === 0) {
+        if (yearSelector) yearSelector.style.display = 'none';
+        return;
+    }
+    
+    let html = '<div class="year-selector-wrapper">';
+    html += '<div class="year-selector-label">Years:</div>';
+    html += '<div class="year-checkboxes">';
+    
+    seasons.forEach(season => {
+        html += `<div class="year-checkbox-item">`;
+        html += `<input type="checkbox" id="year-${season}" value="${season}" checked class="year-checkbox" onchange="filterByYear()">`;
+        html += `<label for="year-${season}" class="year-label">${season}</label>`;
+        html += `</div>`;
+    });
+    
+    html += '</div>';
+    html += '<button class="year-select-all-btn" onclick="toggleAllYears()">Select All</button>';
+    html += '</div>';
+    
+    yearSelector.innerHTML = html;
+    yearSelector.style.display = 'block';
+}
+
+// Toggle all years
+window.toggleAllYears = function() {
+    if (!window.fangraphsSeasons) return;
+    
+    const checkboxes = window.fangraphsSeasons.map(season => 
+        document.getElementById(`year-${season}`)
+    ).filter(cb => cb);
+    
+    if (checkboxes.length === 0) return;
+    
+    const allChecked = checkboxes.every(cb => cb.checked);
+    checkboxes.forEach(cb => {
+        cb.checked = !allChecked;
+    });
+    
+    filterByYear();
+};
+
+// Filter tables by selected years
+window.filterByYear = function() {
+    if (!window.fangraphsData || !window.fangraphsSeasons) return;
+    
+    // Get selected seasons
+    const selectedSeasons = new Set();
+    window.fangraphsSeasons.forEach(season => {
+        const checkbox = document.getElementById(`year-${season}`);
+        if (checkbox && checkbox.checked) {
+            selectedSeasons.add(String(season));
+        }
+    });
+    
+    // Show/hide rows based on selection across all category tables
+    const dashboardRows = document.querySelectorAll('#dashboardTable tbody tr[data-season]');
+    const fangraphsRows = document.querySelectorAll('#fangraphsTable tbody tr[data-season]');
+    const positionsRows = document.querySelectorAll('#positionsTable tbody tr[data-season]');
+    const allRows = [...dashboardRows, ...fangraphsRows, ...positionsRows];
+    
+    allRows.forEach(row => {
+        const season = String(row.getAttribute('data-season'));
+        if (selectedSeasons.has(season)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    // Show message if no seasons selected
+    let hasVisibleRows = false;
+    allRows.forEach(row => {
+        if (row.style.display !== 'none') {
+            hasVisibleRows = true;
+        }
+    });
+    
+    const dashboardContainer = document.getElementById('dashboardTable');
+    const fangraphsContainer = document.getElementById('fangraphsTable');
+    const positionsContainer = document.getElementById('positionsTable');
+    
+    [dashboardContainer, fangraphsContainer, positionsContainer].forEach(container => {
+        if (!container) return;
+        let noDataMsg = container.querySelector('.no-seasons-message');
+        if (!hasVisibleRows) {
+            if (!noDataMsg) {
+                noDataMsg = document.createElement('div');
+                noDataMsg.className = 'no-seasons-message no-data';
+                noDataMsg.textContent = 'No years selected';
+                container.appendChild(noDataMsg);
+            }
+        } else if (noDataMsg) {
+            noDataMsg.remove();
+        }
+    });
+};
+
+// Legacy function for compatibility
+window.filterFangraphsBySeason = function() {
+    filterByYear();
+};
+
+// Load player headshot
+async function loadPlayerHeadshot(playerName) {
+    const headshotContainer = document.getElementById('playerHeadshot');
+    if (!headshotContainer) return;
+    
+    // Try to get player ID from multiple sources
+    let playerId = null;
+    try {
+        // First, try positions data
+        const positionsData = window.positionsData || [];
+        if (positionsData.length > 0) {
+            const firstRecord = positionsData[0];
+            // Check for common player ID fields in positions data
+            playerId = firstRecord['player_id'] || firstRecord['Player ID'] || firstRecord['PLAYER_ID'] || 
+                      firstRecord['mlbam_id'] || firstRecord['MLBAM_ID'] || firstRecord['mlb_id'] || 
+                      firstRecord['MLB_ID'] || null;
+        }
+        
+        // If not found in positions, try fangraphs data (works for both hitters and pitchers)
+        if (!playerId) {
+            const fangraphsData = window.fangraphsData || [];
+            if (fangraphsData.length > 0) {
+                const firstRecord = fangraphsData[0];
+                // Check for player ID fields in fangraphs data
+                // Fangraphs might have IDfg, playerid, or other ID fields
+                playerId = firstRecord['player_id'] || firstRecord['Player ID'] || firstRecord['PLAYER_ID'] ||
+                          firstRecord['IDfg'] || firstRecord['idfg'] || firstRecord['IDFG'] ||
+                          firstRecord['playerid'] || firstRecord['PlayerID'] || firstRecord['PLAYERID'] ||
+                          firstRecord['mlbam_id'] || firstRecord['MLBAM_ID'] || firstRecord['mlb_id'] || 
+                          firstRecord['MLB_ID'] || null;
+            }
+        }
+        
+        // If still not found, try to look up via API
+        if (!playerId) {
+            try {
+                const response = await fetch(`/api/csv/player/${encodeURIComponent(playerName)}`);
+                const data = await response.json();
+                if (data && !data.error) {
+                    // Check positions data from API response (this should have player_id from CSV)
+                    if (data.positions && data.positions.length > 0) {
+                        // Try all records, not just the first one
+                        for (const record of data.positions) {
+                            playerId = record['player_id'] || record['Player ID'] || record['PLAYER_ID'] ||
+                                      record['mlbam_id'] || record['MLBAM_ID'] || record['mlb_id'] || 
+                                      record['MLB_ID'] || null;
+                            if (playerId) break;
+                        }
+                    }
+                    // Check fangraphs data from API response
+                    if (!playerId && data.fangraphs && data.fangraphs.length > 0) {
+                        const firstRecord = data.fangraphs[0];
+                        playerId = firstRecord['player_id'] || firstRecord['Player ID'] || firstRecord['PLAYER_ID'] ||
+                                  firstRecord['IDfg'] || firstRecord['idfg'] || firstRecord['IDFG'] ||
+                                  firstRecord['playerid'] || firstRecord['PlayerID'] || firstRecord['PLAYERID'] ||
+                                  firstRecord['mlbam_id'] || firstRecord['MLBAM_ID'] || firstRecord['mlb_id'] || 
+                                  firstRecord['MLB_ID'] || null;
+                    }
+                }
+            } catch (apiError) {
+                console.log('Could not fetch player ID from API:', apiError);
+            }
+        }
+        
+        // Last resort: try to look up player ID by name using a lookup API
+        // Note: This would require a backend endpoint - for now we'll rely on the data we have
+    } catch (e) {
+        console.log('Could not get player ID from data:', e);
+    }
+    
+    console.log('Player ID found for', playerName, ':', playerId);
+    
+    // List of headshot URLs to try (in order of preference)
+    const headshotUrls = [];
+    
+    if (playerId) {
+        // If we have a player ID, use MLB.com URLs
+        headshotUrls.push(
+            `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_213,q_auto:best/v1/people/${playerId}/headshot/67/current`,
+            `https://content.mlb.com/images/headshots/current/213x213/${playerId}.png`,
+            `https://content.mlb.com/images/headshots/current/60x60/${playerId}.png`,
+            `https://securea.mlb.com/mlb/images/players/head_shot/${playerId}.jpg`
+        );
+    }
+    
+    // Fallback: try name-based URLs (less reliable)
+    const nameSlug = playerName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+    headshotUrls.push(
+        `https://img.mlbstatic.com/mlb-photos/image/upload/w_213,q_auto:best/v1/people/${nameSlug}/headshot/67/current`
+    );
+    
+    // Try each URL until one works
+    let imgIndex = 0;
+    function tryNextImage() {
+        if (imgIndex >= headshotUrls.length) {
+            // All URLs failed, keep placeholder
+            return;
+        }
+        
+        const img = document.createElement('img');
+        img.src = headshotUrls[imgIndex];
+        img.alt = `${playerName} headshot`;
+        img.style.display = 'none';
+        
+        img.onload = function() {
+            const placeholder = headshotContainer.querySelector('.headshot-placeholder');
+            if (placeholder) {
+                placeholder.remove();
+            }
+            // Remove any existing failed images
+            const existingImgs = headshotContainer.querySelectorAll('img');
+            existingImgs.forEach(existingImg => existingImg.remove());
+            headshotContainer.appendChild(img);
+            img.style.display = 'block';
+        };
+        
+        img.onerror = function() {
+            imgIndex++;
+            tryNextImage();
+        };
+        
+        // Add image to container (hidden) to trigger load
+        headshotContainer.appendChild(img);
+    }
+    
+    tryNextImage();
+}
+
+// Display Positions data
+function displayPositionsData(data) {
+    const container = document.getElementById('positionsTable');
+    const playerInfoContainer = document.getElementById('playerInfo');
+    
+    // Hide the entire positions section (including the table)
+    if (container) {
+        const positionsSection = container.closest('.stats-section');
+        if (positionsSection) {
+            positionsSection.style.display = 'none';
+        } else {
+            container.style.display = 'none';
+        }
+    }
+    
+    if (!data || data.length === 0) {
+        return;
+    }
+    
+    // Extract Team Name, Position Name, and Player Name from first record
+    const firstRecord = data[0];
+    
+    // Helper function to find value by various key name possibilities
+    const findValue = (possibleKeys) => {
+        for (const key of possibleKeys) {
+            if (firstRecord[key] !== null && firstRecord[key] !== undefined && firstRecord[key] !== '') {
+                return firstRecord[key];
+            }
+        }
+        return null;
+    };
+    
+    // Extract Player Name
+    const playerName = findValue(['Player Name', 'player_name', 'name', 'Name', 'PLAYER_NAME']);
+    const teamName = findValue(['Team Name', 'team_name', 'Team', 'TEAM_NAME', 'team']);
+    const positionName = findValue(['Position Name', 'position_name', 'Position', 'POSITION_NAME', 'position', 'Pos']);
+    
+    // Build player info HTML with headshot
+    let infoHtml = '<div class="player-info-content">';
+    
+    if (playerName) {
+        infoHtml += '<div class="player-info-item">';
+        infoHtml += '<span class="player-info-label">Player</span>';
+        infoHtml += `<span class="player-info-value">${playerName}</span>`;
+        infoHtml += '</div>';
+    }
+    
+    if (teamName) {
+        infoHtml += '<div class="player-info-item">';
+        infoHtml += '<span class="player-info-label">Team</span>';
+        infoHtml += `<span class="player-info-value">${teamName}</span>`;
+        infoHtml += '</div>';
+    }
+    
+    if (positionName) {
+        infoHtml += '<div class="player-info-item">';
+        infoHtml += '<span class="player-info-label">Position</span>';
+        infoHtml += `<span class="player-info-value">${positionName}</span>`;
+        infoHtml += '</div>';
+    }
+    
+    infoHtml += '</div>';
+    
+    // Add headshot
+    infoHtml += '<div class="player-headshot" id="playerHeadshot">';
+    infoHtml += '<div class="headshot-placeholder"><i class="fas fa-user"></i></div>';
+    infoHtml += '</div>';
+    
+    if (playerInfoContainer) {
+        playerInfoContainer.innerHTML = infoHtml;
+        
+        // Load headshot image
+        if (playerName) {
+            loadPlayerHeadshot(playerName);
+        }
+    }
+}
+
+// Display Statcast data
+function displayStatcastData(data) {
+    const container = document.getElementById('statscastTable');
+    
+    if (!data || data.length === 0) {
+        container.innerHTML = '<div class="no-data">No Statcast data available</div>';
+        return;
+    }
+    
+    // Get all unique keys
+    const allKeys = new Set();
+    data.forEach(row => {
+        Object.keys(row).forEach(key => {
+            if (row[key] !== null && row[key] !== '') {
+                allKeys.add(key);
+            }
+        });
+    });
+    
+    const sortedKeys = Array.from(allKeys).sort();
+    
+    let html = '<table class="stats-table">';
+    html += '<thead><tr><th>Stat</th>';
+    data.forEach((row, idx) => {
+        const year = row.year || row.Year || `Record ${idx + 1}`;
+        html += `<th>${year}</th>`;
+    });
+    html += '</tr></thead><tbody>';
+    
+    sortedKeys.forEach(key => {
+        html += '<tr>';
+        html += `<td><strong>${formatStatName(key)}</strong></td>`;
+        data.forEach(row => {
+            const value = row[key];
+            html += `<td>${formatValue(value)}</td>`;
+        });
+        html += '</tr>';
+    });
+    
+    html += '</tbody></table>';
+    container.innerHTML = html;
+}
+
+// Format stat names (remove prefixes, make readable)
+function formatStatName(key) {
+    // Remove common prefixes
+    let formatted = key.replace(/^fg_/i, '').replace(/^b_/i, '').replace(/^r_/i, '');
+    
+    // Replace underscores with spaces
+    formatted = formatted.replace(/_/g, ' ');
+    
+    // Capitalize words
+    formatted = formatted.split(' ').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+    ).join(' ');
+    
+    return formatted;
+}
+
+// Format values
+function formatValue(value) {
+    if (value === null || value === undefined || value === '') {
+        return '—';
+    }
+    
+    if (typeof value === 'number') {
+        // Format decimals
+        if (value % 1 !== 0) {
+            // Round to 3 decimal places for small numbers, or fewer for larger
+            if (Math.abs(value) < 1) {
+                return value.toFixed(3);
+            } else if (Math.abs(value) < 100) {
+                return value.toFixed(2);
+            } else {
+                return value.toFixed(1);
+            }
+        }
+        return value.toString();
+    }
+    
+    return value.toString();
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    const playerSearch = document.getElementById('playerSearch');
+    const searchButton = document.getElementById('searchButton');
+    const headerSearch = document.getElementById('playerSearchInHeader');
+    const headerSearchButton = document.getElementById('searchButtonInHeader');
+    
+    // Debug: Check if elements are found
+    if (!playerSearch) {
+        console.error('playerSearch element not found!');
+    }
+    if (!searchButton) {
+        console.error('searchButton element not found!');
+    }
+    
+    // Helper function to handle search
+    async function handleSearch(inputElement) {
+        const rawName = inputElement.value.trim();
+        if (!rawName) {
+            return;
+        }
+
+        const playerName = normalizePlayerName(rawName);
+
+        // Keep original text in inputs for display
+        if (inputElement.id === 'playerSearch' && headerSearch) {
+            headerSearch.value = rawName;
+        } else if (inputElement.id === 'playerSearchInHeader' && playerSearch) {
+            playerSearch.value = rawName;
+        }
+
+        if (!playerName) {
+            return;
+        }
+        
+        // Hide suggestions
+        document.getElementById('searchSuggestions').style.display = 'none';
+        document.getElementById('headerSearchSuggestions').style.display = 'none';
+        
+        // If it's the header search, validate the player name
+        if (inputElement.id === 'playerSearchInHeader') {
+            const isValid = await validatePlayerName(playerName);
+            if (!isValid) {
+                // Show error message
+                const errorMessage = document.getElementById('errorMessage');
+                if (errorMessage) {
+                    errorMessage.textContent = `Player "${rawName}" not found. Please select a player from the dropdown or type the exact player name.`;
+                    errorMessage.style.display = 'block';
+                    
+                    // Clear error after 5 seconds
+                    setTimeout(() => {
+                        errorMessage.style.display = 'none';
+                    }, 5000);
+                }
+                
+                // Show suggestions again if they exist
+                const suggestionsDiv = document.getElementById('headerSearchSuggestions');
+                if (suggestionsDiv && suggestionsDiv.innerHTML.trim() !== '') {
+                    suggestionsDiv.style.display = 'block';
+                }
+                return;
+            }
+        }
+        
+        // Sync both search inputs
+        loadPlayerData(playerName, rawName);
+    }
+    
+    // Main search bar
+    if (playerSearch) {
+        console.log('Setting up search input listeners');
+        playerSearch.addEventListener('input', function(e) {
+            console.log('Input event triggered:', this.value);
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(function() {
+                console.log('Calling searchPlayers with:', playerSearch.value);
+                searchPlayers();
+            }, 300);
+            // Sync to header search
+            if (headerSearch) headerSearch.value = this.value;
+        });
+
+        playerSearch.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                console.log('Enter key pressed, calling handleSearch');
+                handleSearch(this);
+            }
+        });
+        
+        // Also add focus event to ensure it's working
+        playerSearch.addEventListener('focus', function() {
+            console.log('Search input focused');
+        });
+    } else {
+        console.error('playerSearch element is null, cannot attach listeners');
+    }
+    
+    if (searchButton) {
+        searchButton.addEventListener('click', function() {
+            if (playerSearch) handleSearch(playerSearch);
+        });
+    }
+
+    // Preload search term from query parameter if present
+    const params = new URLSearchParams(window.location.search);
+    const presetPlayer = params.get('player');
+    if (presetPlayer) {
+        if (playerSearch) playerSearch.value = presetPlayer;
+        if (headerSearch) headerSearch.value = presetPlayer;
+        handleSearch(playerSearch || headerSearch);
+    }
+    
+    // Header search bar
+    if (headerSearch) {
+        headerSearch.addEventListener('input', function() {
+            clearTimeout(headerSearchTimeout);
+            const searchTerm = this.value.trim();
+            const normalized = normalizePlayerName(searchTerm);
+            
+            // Clear year selector when user starts typing a new search
+            if (searchTerm.length > 0 && normalized !== currentPlayerName) {
+                const yearSelector = document.getElementById('yearSelector');
+                if (yearSelector) {
+                    yearSelector.style.display = 'none';
+                }
+            }
+            
+            if (normalized.length >= 2) {
+                headerSearchTimeout = setTimeout(searchPlayersInHeader, 300);
+            } else {
+                document.getElementById('headerSearchSuggestions').style.display = 'none';
+            }
+        });
+        
+        headerSearch.addEventListener('focus', function() {
+            if (this.value.trim().length >= 2) {
+                searchPlayersInHeader();
+            }
+        });
+        
+        headerSearch.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                clearTimeout(headerSearchTimeout);
+                handleSearch(this);
+            } else if (e.key === 'Escape') {
+                document.getElementById('headerSearchSuggestions').style.display = 'none';
+            }
+        });
+    }
+    
+    if (headerSearchButton) {
+        headerSearchButton.addEventListener('click', function() {
+            if (headerSearch) {
+                clearTimeout(headerSearchTimeout);
+                handleSearch(headerSearch);
+            }
+        });
+    }
+
+    // Close suggestions when clicking outside
+    document.addEventListener('click', function(e) {
+        const suggestions = document.getElementById('searchSuggestions');
+        const headerSuggestions = document.getElementById('headerSearchSuggestions');
+        const searchInput = document.getElementById('playerSearch');
+        const headerSearchInput = document.getElementById('playerSearchInHeader');
+        
+        if (suggestions && searchInput && !suggestions.contains(e.target) && !searchInput.contains(e.target)) {
+            suggestions.style.display = 'none';
+        }
+        
+        if (headerSuggestions && headerSearchInput && !headerSuggestions.contains(e.target) && !headerSearchInput.contains(e.target) && !e.target.closest('.search-button')) {
+            headerSuggestions.style.display = 'none';
+        }
+    });
+    
+    // Make player tags clickable
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('player-tag')) {
+            const playerName = e.target.getAttribute('data-player');
+            if (playerName) {
+                const mainSearch = document.getElementById('playerSearch');
+                const headerSearch = document.getElementById('playerSearchInHeader');
+                
+                if (mainSearch) {
+                    mainSearch.value = playerName;
+                }
+                if (headerSearch) {
+                    headerSearch.value = playerName;
+                }
+                
+                selectPlayer(playerName);
+            }
+        }
+    });
+});
+</script>
+{% endblock %}
+

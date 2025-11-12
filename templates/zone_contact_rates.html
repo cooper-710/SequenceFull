@@ -1,0 +1,969 @@
+{% extends "base.html" %}
+
+{% block title %}Zone Contact Rates - Sequence BioLab Analytics{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div>
+                <h1>Zone Contact Rates</h1>
+                <p class="page-subtitle">Interactive strike zone visualization showing contact rates, swing rates, and quality of contact metrics across different pitch locations</p>
+            </div>
+            <a href="{{ url_for('visuals') }}" class="back-button">
+                <i class="fas fa-arrow-left"></i> Back to Visuals
+            </a>
+        </div>
+    </div>
+
+    <div class="content-wrapper">
+        <!-- Controls Panel -->
+        <div class="pitchmix-controls">
+            <div class="control-group control-group-full">
+                <label class="control-label">Batter Search</label>
+                <div class="player-search-container">
+                    <input 
+                        type="text" 
+                        id="batterSearch" 
+                        class="control-input" 
+                        placeholder="Type to search batters..."
+                        autocomplete="off"
+                    >
+                    <div id="batterSearchDropdown" class="player-dropdown" style="display: none;"></div>
+                </div>
+                <div id="selectedBatterDisplay" class="selected-player-display" style="display: none;">
+                    <span id="selectedBatterName"></span>
+                    <button id="clearBatter" class="clear-player-btn">×</button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label class="control-label">Season</label>
+                <select id="seasonSelect" class="control-select">
+                    <option value="">All Seasons</option>
+                </select>
+            </div>
+
+            <button id="generateAnalysis" class="generate-btn" type="button">
+                <i class="fas fa-bullseye"></i> Generate Visualization
+            </button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading zone contact data...</p>
+        </div>
+
+        <!-- Error Message -->
+        <div id="errorMessage" class="error-message" style="display: none;">
+            <i class="fas fa-exclamation-circle"></i>
+            <span id="errorText"></span>
+        </div>
+
+        <!-- Main Analysis Content -->
+        <div id="analysisContent" class="analysis-content" style="display: none;">
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <h2 id="batterTitle"></h2>
+                <div class="summary-stats">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Pitches</div>
+                        <div class="stat-value" id="totalPitches">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Batter Hand</div>
+                        <div class="stat-value" id="batterHand">-</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Season</div>
+                        <div class="stat-value" id="seasonDisplay">-</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Metric Selector -->
+            <div class="metric-selector-section">
+                <h3>Select Metric to Visualize</h3>
+                <div class="metric-selector-row">
+                    <label>Metric:</label>
+                    <select id="metricSelect" class="metric-select">
+                        <option value="contact_rate">Contact Rate</option>
+                        <option value="swing_rate">Swing Rate</option>
+                        <option value="whiff_rate">Whiff Rate</option>
+                        <option value="hard_hit_rate">Hard Hit Rate</option>
+                        <option value="barrel_rate">Barrel Rate</option>
+                        <option value="avg_exit_velo">Avg Exit Velocity</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Strike Zone Visualization -->
+            <div class="visualization-section">
+                <div class="strike-zone-container">
+                    <canvas id="strikeZoneCanvas"></canvas>
+                    <div id="tooltip" class="tooltip" style="display: none;"></div>
+                </div>
+                <div class="color-scale-container">
+                    <div class="color-scale-label" id="colorScaleLabel">Contact Rate (%)</div>
+                    <canvas id="colorScaleCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Zone Stats Table -->
+            <div class="zone-stats-section">
+                <h3>Zone Statistics</h3>
+                <div class="zone-info">
+                    <p>Hover over zones in the visualization above to see detailed statistics. The table below shows aggregated data by zone location.</p>
+                </div>
+                <div id="zoneStatsTable" class="zone-stats-table"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedBatter = null;
+let zoneData = null;
+let currentMetric = 'contact_rate';
+let canvas = null;
+let ctx = null;
+let colorScaleCanvas = null;
+let colorScaleCtx = null;
+
+// Color scale for heatmap (blue to yellow to red)
+const HEATMAP_COLORS = [
+    { stop: 0.0, r: 0, g: 0, b: 255 },      // Blue (low)
+    { stop: 0.25, r: 0, g: 255, b: 255 },   // Cyan
+    { stop: 0.5, r: 0, g: 255, b: 0 },      // Green
+    { stop: 0.75, r: 255, g: 255, b: 0 },   // Yellow
+    { stop: 1.0, r: 255, g: 0, b: 0 }       // Red (high)
+];
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    loadFilterOptions();
+    setupBatterSearch();
+    
+    canvas = document.getElementById('strikeZoneCanvas');
+    ctx = canvas.getContext('2d');
+    colorScaleCanvas = document.getElementById('colorScaleCanvas');
+    colorScaleCtx = colorScaleCanvas.getContext('2d');
+    
+    // Set canvas size
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    
+    document.getElementById('generateAnalysis').addEventListener('click', function() {
+        if (!selectedBatter) {
+            alert('Please select a batter first');
+            return;
+        }
+        generateAnalysis();
+    });
+
+    document.getElementById('clearBatter').addEventListener('click', function() {
+        clearBatterSelection();
+    });
+
+    document.getElementById('metricSelect').addEventListener('change', function() {
+        currentMetric = this.value;
+        if (zoneData) {
+            updateVisualization();
+        }
+    });
+
+    // Hover tooltip
+    canvas.addEventListener('mousemove', function(e) {
+        if (!zoneData) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        handleCanvasHover(x, y);
+    });
+
+    canvas.addEventListener('mouseleave', function() {
+        document.getElementById('tooltip').style.display = 'none';
+    });
+});
+
+function resizeCanvas() {
+    const container = canvas.parentElement;
+    const size = Math.min(container.clientWidth - 40, 600);
+    canvas.width = size;
+    canvas.height = size;
+    colorScaleCanvas.width = 300;
+    colorScaleCanvas.height = 20;
+    if (zoneData) {
+        updateVisualization();
+    }
+}
+
+async function loadFilterOptions() {
+    const currentYear = new Date().getFullYear();
+    const seasonSelect = document.getElementById('seasonSelect');
+    for (let year = currentYear; year >= 2015; year--) {
+        const option = document.createElement('option');
+        option.value = year;
+        option.textContent = year;
+        seasonSelect.appendChild(option);
+    }
+}
+
+function setupBatterSearch() {
+    const searchInput = document.getElementById('batterSearch');
+    const dropdown = document.getElementById('batterSearchDropdown');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            dropdown.style.display = 'none';
+            return;
+        }
+
+        searchTimeout = setTimeout(async () => {
+            try {
+                const response = await fetch(`/api/csv/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.players && data.players.length > 0) {
+                    dropdown.innerHTML = '';
+                    data.players.slice(0, 10).forEach(player => {
+                        const item = document.createElement('div');
+                        item.className = 'player-dropdown-item';
+                        item.textContent = player.name || player;
+                        item.addEventListener('click', function() {
+                            selectBatter(player.name || player);
+                            dropdown.style.display = 'none';
+                            searchInput.value = '';
+                        });
+                        dropdown.appendChild(item);
+                    });
+                    dropdown.style.display = 'block';
+                } else {
+                    dropdown.style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error searching batters:', error);
+            }
+        }, 300);
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+}
+
+function selectBatter(name) {
+    selectedBatter = name;
+    const searchInput = document.getElementById('batterSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.blur();
+    }
+    const dropdown = document.getElementById('batterSearchDropdown');
+    if (dropdown) {
+        dropdown.style.display = 'none';
+        dropdown.innerHTML = '';
+    }
+    document.getElementById('selectedBatterName').textContent = name;
+    document.getElementById('selectedBatterDisplay').style.display = 'flex';
+    document.getElementById('generateAnalysis').classList.remove('disabled');
+}
+
+function clearBatterSelection() {
+    selectedBatter = null;
+    document.getElementById('selectedBatterDisplay').style.display = 'none';
+    document.getElementById('generateAnalysis').classList.add('disabled');
+    document.getElementById('analysisContent').style.display = 'none';
+    zoneData = null;
+}
+
+async function generateAnalysis() {
+    const season = document.getElementById('seasonSelect').value;
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const errorMessage = document.getElementById('errorMessage');
+    const analysisContent = document.getElementById('analysisContent');
+    
+    errorMessage.style.display = 'none';
+    analysisContent.style.display = 'none';
+    loadingIndicator.style.display = 'flex';
+    
+    try {
+        let url = `/api/visuals/zone-contact-rates?batter=${encodeURIComponent(selectedBatter)}`;
+        if (season) {
+            url += `&season=${season}`;
+        }
+        
+        const response = await fetch(url);
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        zoneData = data;
+        displayAnalysis(data);
+        loadingIndicator.style.display = 'none';
+        analysisContent.style.display = 'block';
+        updateVisualization();
+    } catch (error) {
+        loadingIndicator.style.display = 'none';
+        errorMessage.style.display = 'flex';
+        document.getElementById('errorText').textContent = error.message;
+        console.error('Error generating analysis:', error);
+    }
+}
+
+function displayAnalysis(data) {
+    document.getElementById('batterTitle').textContent = data.batter;
+    document.getElementById('totalPitches').textContent = data.total_pitches.toLocaleString();
+    document.getElementById('batterHand').textContent = data.batter_hand === 'R' ? 'Right' : 'Left';
+    document.getElementById('seasonDisplay').textContent = data.season || 'All Seasons';
+}
+
+function updateVisualization() {
+    if (!zoneData) return;
+    
+    drawStrikeZone();
+    drawColorScale();
+}
+
+function drawStrikeZone() {
+    const gridSize = zoneData.grid_size || 12;
+    const xRange = zoneData.x_range || [-2.0, 2.0];
+    const zRange = zoneData.z_range || [0.5, 4.5];
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw background
+    ctx.fillStyle = 'var(--color-surface)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Calculate dimensions
+    const padding = 40;
+    const drawWidth = canvas.width - (padding * 2);
+    const drawHeight = canvas.height - (padding * 2);
+    const cellWidth = drawWidth / gridSize;
+    const cellHeight = drawHeight / gridSize;
+    
+    // Get metric values
+    const metricLabels = {
+        'contact_rate': 'Contact Rate (%)',
+        'swing_rate': 'Swing Rate (%)',
+        'whiff_rate': 'Whiff Rate (%)',
+        'hard_hit_rate': 'Hard Hit Rate (%)',
+        'barrel_rate': 'Barrel Rate (%)',
+        'avg_exit_velo': 'Avg Exit Velocity (mph)'
+    };
+    
+    document.getElementById('colorScaleLabel').textContent = metricLabels[currentMetric] || currentMetric;
+    
+    // Extract values for current metric
+    const values = [];
+    const cellMatrix = Array.from({ length: gridSize }, () => Array(gridSize).fill(null));
+    
+    zoneData.grid.forEach(cell => {
+        const x = cell.x;
+        const y = cell.y;
+        if (x >= 0 && x < gridSize && y >= 0 && y < gridSize) {
+            const value = cell[currentMetric];
+            cellMatrix[y][x] = {
+                ...cell,
+                value: value
+            };
+            if (value !== null && value !== undefined && !isNaN(value)) {
+                values.push(value);
+            }
+        }
+    });
+    
+    const minValue = values.length > 0 ? Math.min(...values) : 0;
+    const maxValue = values.length > 0 ? Math.max(...values) : minValue + 1;
+    const valueRange = maxValue - minValue || 1;
+    
+    // Draw grid cells
+    for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+            const cell = cellMatrix[y][x];
+            if (!cell || cell.value === null || cell.value === undefined || isNaN(cell.value)) {
+                continue;
+            }
+            
+            const normalized = (cell.value - minValue) / valueRange;
+            const color = interpolateColor(HEATMAP_COLORS, normalized);
+            
+            const xPos = padding + (x * cellWidth);
+            const yPos = padding + (y * cellHeight);
+            
+            ctx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+            ctx.fillRect(xPos, yPos, cellWidth, cellHeight);
+            
+            // Store cell info for hover
+            cell.pixelX = xPos;
+            cell.pixelY = yPos;
+            cell.pixelWidth = cellWidth;
+            cell.pixelHeight = cellHeight;
+        }
+    }
+    
+    // Draw strike zone outline
+    drawStrikeZoneOutline(padding, drawWidth, drawHeight, xRange, zRange);
+    
+    // Store for hover detection
+    window.strikeZoneState = {
+        cellMatrix,
+        padding,
+        drawWidth,
+        drawHeight,
+        gridSize,
+        minValue,
+        maxValue,
+        currentMetric
+    };
+}
+
+function drawStrikeZoneOutline(padding, drawWidth, drawHeight, xRange, zRange) {
+    // MLB strike zone: x from -0.7083 to 0.7083, z from 1.5 to 3.5
+    const strikeZoneLeft = -0.7083;
+    const strikeZoneRight = 0.7083;
+    const strikeZoneBottom = 1.5;
+    const strikeZoneTop = 3.5;
+    
+    const xSpan = xRange[1] - xRange[0];
+    const zSpan = zRange[1] - zRange[0];
+    
+    const zoneX = padding + drawWidth * ((strikeZoneLeft - xRange[0]) / xSpan);
+    const zoneY = padding + drawHeight * (1 - ((strikeZoneTop - zRange[0]) / zSpan));
+    const zoneWidth = drawWidth * ((strikeZoneRight - strikeZoneLeft) / xSpan);
+    const zoneHeight = drawHeight * ((strikeZoneTop - strikeZoneBottom) / zSpan);
+    
+    ctx.strokeStyle = 'var(--color-text-primary)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(zoneX, zoneY, zoneWidth, zoneHeight);
+    ctx.setLineDash([]);
+}
+
+function drawColorScale() {
+    const width = colorScaleCanvas.width;
+    const height = colorScaleCanvas.height;
+    
+    colorScaleCtx.clearRect(0, 0, width, height);
+    
+    for (let x = 0; x < width; x++) {
+        const normalized = x / width;
+        const color = interpolateColor(HEATMAP_COLORS, normalized);
+        colorScaleCtx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+        colorScaleCtx.fillRect(x, 0, 1, height);
+    }
+    
+    // Draw labels
+    if (window.strikeZoneState) {
+        const { minValue, maxValue, currentMetric } = window.strikeZoneState;
+        colorScaleCtx.fillStyle = 'var(--color-text-primary)';
+        colorScaleCtx.font = '12px Arial';
+        colorScaleCtx.textAlign = 'left';
+        colorScaleCtx.fillText(formatValue(minValue, currentMetric), 5, height - 5);
+        colorScaleCtx.textAlign = 'right';
+        colorScaleCtx.fillText(formatValue(maxValue, currentMetric), width - 5, height - 5);
+    }
+}
+
+function interpolateColor(colors, t) {
+    t = Math.max(0, Math.min(1, t));
+    
+    for (let i = 0; i < colors.length - 1; i++) {
+        if (t >= colors[i].stop && t <= colors[i + 1].stop) {
+            const localT = (t - colors[i].stop) / (colors[i + 1].stop - colors[i].stop);
+            return {
+                r: Math.round(colors[i].r + (colors[i + 1].r - colors[i].r) * localT),
+                g: Math.round(colors[i].g + (colors[i + 1].g - colors[i].g) * localT),
+                b: Math.round(colors[i].b + (colors[i + 1].b - colors[i].b) * localT)
+            };
+        }
+    }
+    
+    return colors[colors.length - 1];
+}
+
+function formatValue(value, metric) {
+    if (value === null || value === undefined || isNaN(value)) return 'N/A';
+    
+    if (metric === 'avg_exit_velo') {
+        return value.toFixed(1) + ' mph';
+    } else if (metric.includes('rate')) {
+        return value.toFixed(1) + '%';
+    }
+    return value.toFixed(2);
+}
+
+function handleCanvasHover(x, y) {
+    if (!window.strikeZoneState) return;
+    
+    const { cellMatrix, padding, drawWidth, drawHeight, gridSize, currentMetric } = window.strikeZoneState;
+    
+    // Find which cell we're hovering over
+    for (let row = 0; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+            const cell = cellMatrix[row][col];
+            if (!cell || !cell.pixelX) continue;
+            
+            if (x >= cell.pixelX && x < cell.pixelX + cell.pixelWidth &&
+                y >= cell.pixelY && y < cell.pixelY + cell.pixelHeight) {
+                
+                showTooltip(x, y, cell, currentMetric);
+                return;
+            }
+        }
+    }
+    
+    document.getElementById('tooltip').style.display = 'none';
+}
+
+function showTooltip(x, y, cell, metric) {
+    const tooltip = document.getElementById('tooltip');
+    const metricLabels = {
+        'contact_rate': 'Contact Rate',
+        'swing_rate': 'Swing Rate',
+        'whiff_rate': 'Whiff Rate',
+        'hard_hit_rate': 'Hard Hit Rate',
+        'barrel_rate': 'Barrel Rate',
+        'avg_exit_velo': 'Avg Exit Velocity'
+    };
+    
+    let html = `<div class="tooltip-title">Zone: (${cell.x_center.toFixed(2)}, ${cell.z_center.toFixed(2)})</div>`;
+    html += `<div class="tooltip-stat">${metricLabels[metric]}: ${formatValue(cell.value, metric)}</div>`;
+    html += `<div class="tooltip-stat">Total Pitches: ${cell.total_pitches}</div>`;
+    html += `<div class="tooltip-stat">Swings: ${cell.swings}</div>`;
+    html += `<div class="tooltip-stat">Contacts: ${cell.contacts}</div>`;
+    
+    if (cell.contact_rate !== null) {
+        html += `<div class="tooltip-stat">Contact Rate: ${cell.contact_rate.toFixed(1)}%</div>`;
+    }
+    if (cell.swing_rate !== null) {
+        html += `<div class="tooltip-stat">Swing Rate: ${cell.swing_rate.toFixed(1)}%</div>`;
+    }
+    if (cell.whiff_rate !== null) {
+        html += `<div class="tooltip-stat">Whiff Rate: ${cell.whiff_rate.toFixed(1)}%</div>`;
+    }
+    if (cell.hard_hit_rate !== null) {
+        html += `<div class="tooltip-stat">Hard Hit Rate: ${cell.hard_hit_rate.toFixed(1)}%</div>`;
+    }
+    if (cell.avg_exit_velo !== null) {
+        html += `<div class="tooltip-stat">Avg Exit Velo: ${cell.avg_exit_velo.toFixed(1)} mph</div>`;
+    }
+    
+    tooltip.innerHTML = html;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (x + 20) + 'px';
+    tooltip.style.top = (y + 20) + 'px';
+}
+</script>
+
+<style>
+.page-container {
+    padding: 2rem;
+    max-width: 100%;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+}
+
+.page-subtitle {
+    color: var(--color-text-subtle);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.back-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--color-border);
+    color: var(--color-text-primary);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: background 0.3s ease;
+}
+
+.back-button:hover {
+    background: var(--color-accent);
+}
+
+.content-wrapper {
+    width: 100%;
+}
+
+.pitchmix-controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.control-group-full {
+    flex: 1;
+    min-width: 300px;
+}
+
+.control-label {
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.control-input,
+.control-select {
+    padding: 0.75rem;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+}
+
+.control-input:focus,
+.control-select:focus {
+    outline: none;
+    border-color: var(--color-accent);
+}
+
+.player-search-container {
+    position: relative;
+}
+
+.player-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    margin-top: 0.25rem;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1000;
+}
+
+.player-dropdown-item {
+    padding: 0.75rem;
+    cursor: pointer;
+    color: var(--color-text-primary);
+    transition: background 0.2s ease;
+}
+
+.player-dropdown-item:hover {
+    background: var(--color-border);
+}
+
+.selected-player-display {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+    background: var(--color-border);
+    border-radius: 6px;
+    margin-top: 0.5rem;
+    color: var(--color-text-primary);
+}
+
+.clear-player-btn {
+    background: transparent;
+    border: none;
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: background 0.2s ease;
+}
+
+.clear-player-btn:hover {
+    background: var(--color-accent);
+}
+
+.generate-btn {
+    padding: 0.75rem 1.5rem;
+    background: var(--color-accent);
+    color: var(--color-main-bg);
+    border: none;
+    border-radius: 6px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: background 0.3s ease;
+}
+
+.generate-btn:hover:not(.disabled) {
+    background: var(--color-accent-bright);
+}
+
+.generate-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.loading-indicator {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 3rem;
+    color: var(--color-text-primary);
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid var(--color-border);
+    border-top-color: var(--color-accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.error-message {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem;
+    background: color-mix(in srgb, var(--color-danger) 30%, var(--color-surface));
+    border: 2px solid var(--color-danger);
+    border-radius: 6px;
+    color: var(--color-danger);
+    margin-bottom: 2rem;
+}
+
+.analysis-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.summary-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.summary-section h2 {
+    color: var(--color-accent);
+    margin-bottom: 1rem;
+    font-size: 1.75rem;
+}
+
+.summary-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--color-surface-alt);
+    padding: 1rem;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+}
+
+.stat-label {
+    color: var(--color-text-subtle);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.stat-value {
+    color: var(--color-text-primary);
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.metric-selector-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.metric-selector-section h3 {
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.metric-selector-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.metric-selector-row label {
+    color: var(--color-text-primary);
+    font-weight: 600;
+}
+
+.metric-select {
+    padding: 0.5rem;
+    background: var(--color-surface-alt);
+    border: 2px solid var(--color-border);
+    border-radius: 6px;
+    color: var(--color-text-primary);
+    font-size: 1rem;
+}
+
+.visualization-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.strike-zone-container {
+    position: relative;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+#strikeZoneCanvas {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--color-border-strong);
+    border-radius: 8px;
+}
+
+.tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.95);
+    border: 2px solid var(--color-accent);
+    border-radius: 6px;
+    padding: 0.75rem;
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+    pointer-events: none;
+    z-index: 1000;
+    min-width: 200px;
+}
+
+.tooltip-title {
+    font-weight: 600;
+    color: var(--color-accent);
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-border-strong);
+    padding-bottom: 0.5rem;
+}
+
+.tooltip-stat {
+    margin: 0.25rem 0;
+}
+
+.color-scale-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.color-scale-label {
+    color: var(--color-text-primary);
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+#colorScaleCanvas {
+    border: 1px solid var(--color-border-strong);
+    border-radius: 4px;
+}
+
+.zone-stats-section {
+    background: var(--color-surface);
+    border: 2px solid var(--color-border);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.zone-stats-section h3 {
+    color: var(--color-text-primary);
+    margin-bottom: 1rem;
+    font-size: 1.5rem;
+}
+
+.zone-info {
+    color: var(--color-text-muted);
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+}
+
+.zone-stats-table {
+    color: var(--color-text-primary);
+    font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+    
+    .header-content {
+        flex-direction: column;
+        gap: 1rem;
+    }
+    
+    .pitchmix-controls {
+        flex-direction: column;
+    }
+    
+    .control-group-full {
+        min-width: 100%;
+    }
+}
+</style>
+{% endblock %}
+

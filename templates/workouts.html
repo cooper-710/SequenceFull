@@ -1,0 +1,1669 @@
+{% extends "base.html" %}
+
+{% block title %}Workouts{% endblock %}
+
+{% block content %}
+<div class="page-container workouts-page">
+    <header class="section-hero workouts-hero">
+        <div class="section-hero-heading">
+            <h1 class="hero-content">Workouts</h1>
+        </div>
+        {% if session.get('is_admin') %}
+        <div class="section-hero-actions view-toggle" role="group" aria-label="Workouts view mode">
+            <button class="toggle-btn active" data-mode-toggle="player" aria-pressed="true">
+                <i class="fas fa-eye"></i>
+                <span>Player view</span>
+            </button>
+            <button class="toggle-btn" data-mode-toggle="admin" aria-pressed="false">
+                <i class="fas fa-screwdriver-wrench"></i>
+                <span>Admin mode</span>
+            </button>
+        </div>
+        {% endif %}
+    </header>
+
+    {% if session.get('is_admin') %}
+    <div class="admin-toolbar">
+        <div class="toolbar-group">
+            <label class="player-select">
+                <span>Player</span>
+                <select class="player-native-select" id="workoutPlayerSelect">
+                    <option value="">Select a player</option>
+                </select>
+            </label>
+            <button type="button" class="btn-tertiary toolbar-btn" id="workoutPlayerReload">
+                <i class="fas fa-rotate"></i>
+                <span>Reload roster</span>
+            </button>
+        </div>
+        <div class="toolbar-hint">
+            <i class="fas fa-lightbulb"></i>
+            Tip: choose a player to preview their current view and publish new work.
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="content-wrapper">
+        <div class="workouts-grid {% if session.get('is_admin') %}has-admin{% endif %}">
+            <section class="workout-panel" id="playerModePanel" data-mode-panel="player">
+                <div class="workout-card">
+                    <div class="workout-card-header">
+                        <div class="workout-card-overview">
+                            <h2 class="workout-title" id="workoutFileInline">
+                                {% if workout_document %}
+                                    {{ workout_document.filename }}
+                                {% else %}
+                                    {% if session.get('is_admin') %}
+                                        {% if initial_player_id %}
+                                            No workout assigned
+                                        {% else %}
+                                            Select a player
+                                        {% endif %}
+                                    {% else %}
+                                        No workout assigned
+                                    {% endif %}
+                                {% endif %}
+                            </h2>
+                            <div class="workout-meta-line">
+                                <span id="workoutPlayerNameInline">
+                                    {% if current_user_label %}
+                                        {{ current_user_label }}
+                                    {% elif session.get('is_admin') %}
+                                        {% if initial_player_id %}
+                                            {{ initial_player_label or current_user_label or 'Player' }}
+                                        {% else %}
+                                            Choose a player
+                                        {% endif %}
+                                    {% else %}
+                                        Player
+                                    {% endif %}
+                                </span>
+                                <span class="overview-dot">•</span>
+                                <span id="workoutLastUpdated">
+                                    {% if workout_document %}
+                                        Updated {{ workout_document.uploaded_at }}
+                                    {% else %}
+                                        {% if session.get('is_admin') %}
+                                            {% if initial_player_id %}
+                                                Waiting for upload
+                                            {% else %}
+                                                Waiting for player selection
+                                            {% endif %}
+                                        {% else %}
+                                            Waiting for staff update
+                                        {% endif %}
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="workout-card-actions">
+                            <a id="workoutDownloadButton"
+                               class="btn-ghost-pill"
+                               href="{% if workout_document %}{{ workout_document.download_url }}{% else %}#{% endif %}"
+                               rel="noopener"
+                               aria-disabled="{% if workout_document %}false{% else %}true{% endif %}">
+                                <i class="fas fa-arrow-down"></i>
+                                <span>Download PDF</span>
+                            </a>
+                            <button type="button" class="btn-ghost-pill viewer-refresh" id="workoutRefreshPlayer" title="Check for updates">
+                                <i class="fas fa-rotate"></i>
+                                <span>Refresh</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="workout-meta" id="workoutMeta" {% if not initial_player_id or not workout_document %}hidden{% endif %}>
+                        <span id="workoutPlayerLabel">
+                            {% if initial_player_id %}
+                                {{ current_user_label or 'Player' }}
+                            {% endif %}
+                        </span>
+                        <span id="workoutFilename" class="workout-filename">
+                            {% if workout_document %}
+                                {{ workout_document.filename }}
+                            {% endif %}
+                        </span>
+                        <span id="workoutUploaded" class="workout-uploaded">
+                            {% if workout_document %}
+                                Uploaded {{ workout_document.uploaded_at }}
+                            {% endif %}
+                        </span>
+                    </div>
+
+                    <div class="workout-viewer" id="workoutViewer" {% if not workout_document %}hidden{% endif %}>
+                        <div class="viewer-frame">
+                            <object id="workoutFrame"
+                                    data="{% if workout_document %}{{ (workout_document.viewer_url or workout_document.download_url) }}#toolbar=0{% endif %}"
+                                    type="application/pdf"
+                                    aria-label="Workout training document">
+                                <p>Your browser can’t display this PDF. <a id="workoutDownloadInline" href="{% if workout_document %}{{ workout_document.download_url }}{% else %}#{% endif %}" rel="noopener">Download it instead.</a></p>
+                            </object>
+                        </div>
+                    </div>
+
+                    <div class="workout-empty" id="workoutEmptyState" {% if workout_document %}hidden{% endif %}>
+                        <div class="empty-icon">
+                            <i class="fas fa-file-pdf"></i>
+                        </div>
+                        <h3 class="empty-title" id="workoutEmptyTitle">
+                            {% if workout_document %}
+                                Workout ready
+                            {% elif session.get('is_admin') %}
+                                {% if initial_player_id %}
+                                    No workout yet
+                                {% else %}
+                                    Select a player
+                                {% endif %}
+                            {% else %}
+                                No workout yet
+                            {% endif %}
+                        </h3>
+                        <p class="empty-message" id="workoutEmptyMessage">
+                            {% if workout_document %}
+                                Use the viewer above to read your plan.
+                            {% elif session.get('is_admin') %}
+                                {% if initial_player_id %}
+                                    Upload a PDF to publish the next plan.
+                                {% else %}
+                                    Choose a player to preview and publish their workout.
+                                {% endif %}
+                            {% else %}
+                                Your coaches haven’t posted a workout yet. Check back soon.
+                            {% endif %}
+                        </p>
+                        {% if not session.get('is_admin') %}
+                        <p class="empty-help">Need help? Reach out to your coaching staff.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+
+            {% if session.get('is_admin') %}
+            <section class="workout-admin-panel is-hidden" id="adminModePanel" data-mode-panel="admin">
+                <div class="admin-card">
+                    <header class="admin-card-header">
+                        <h2><i class="fas fa-screwdriver-wrench"></i> Admin Controls</h2>
+                        <p class="workout-helper">Upload a PDF to publish the next workout plan. Players will see it instantly.</p>
+                    </header>
+
+                    <div class="workout-current">
+                        <div class="current-chip-row">
+                            <span class="chip chip-muted" id="workoutAdminStatus">
+                                {% if initial_player_id %}
+                                    {% if workout_document %}Latest plan{% else %}Awaiting upload{% endif %}
+                                {% else %}
+                                    No player selected
+                                {% endif %}
+                            </span>
+                            <span class="current-label">Selected player</span>
+                        </div>
+                        <h3 class="current-title" id="workoutCurrentTitle">
+                            {% if initial_player_id %}
+                                {% if workout_document %}
+                                    {{ workout_document.filename }}
+                                {% else %}
+                                    {{ current_user_label }}
+                                {% endif %}
+                            {% else %}
+                                Choose a player
+                            {% endif %}
+                        </h3>
+                        <p class="current-meta" id="workoutCurrentMeta">
+                            {% if initial_player_id %}
+                                {% if workout_document %}
+                                    Uploaded {{ workout_document.uploaded_at or "just now" }}
+                                {% else %}
+                                    No workout uploaded yet. Add a PDF below to publish the first plan.
+                                {% endif %}
+                            {% else %}
+                                Pick a player to start managing their workouts.
+                            {% endif %}
+                        </p>
+                    </div>
+
+                    <form id="workoutUploadForm"
+                          class="workout-upload{% if not initial_player_id %} is-disabled{% endif %}"
+                          enctype="multipart/form-data"
+                          novalidate>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <label class="upload-drop">
+                            <input type="file" id="workoutFileInput" name="document" accept=".pdf" required>
+                            <span class="upload-prompt">
+                                <strong>Drop workout PDF</strong>
+                                <small>or click to browse files</small>
+                            </span>
+                        </label>
+                        <p class="upload-note" id="workoutUploadNote">
+                            {% if initial_player_id %}
+                            Tip: export from Google Sheets or Excel as a single PDF for best viewing.
+                            {% else %}
+                            Select a player to enable uploading.
+                            {% endif %}
+                        </p>
+                        <div class="upload-actions">
+                            <button type="submit" class="btn-primary" id="workoutUploadButton" {% if not initial_player_id %}disabled{% endif %}>
+                                <i class="fas fa-upload"></i>
+                                <span>Upload &amp; Publish</span>
+                            </button>
+                            <button type="button" class="btn-secondary viewer-refresh" id="workoutRefreshAdmin" {% if not initial_player_id %}disabled{% endif %}>
+                                <i class="fas fa-rotate"></i>
+                                <span>Refresh player view</span>
+                            </button>
+                        </div>
+                        <p class="upload-status" id="workoutUploadStatus" role="status" aria-live="polite"></p>
+                    </form>
+
+                    <section class="workout-history">
+                        <header class="workout-history-header">
+                            <h3><i class="fas fa-clock-rotate-left"></i> Workout History</h3>
+                        </header>
+                        <ul class="workout-history-list" id="workoutHistoryList">
+                            <li class="history-placeholder">Select a player to view previous uploads.</li>
+                        </ul>
+                    </section>
+                </div>
+            </section>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+.workouts-page {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.workouts-hero {
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.admin-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 18px;
+    align-items: center;
+    padding: 24px 28px;
+    border-radius: 18px;
+    background: var(--color-layer-card);
+    border: 1px solid var(--color-layer-border);
+    box-shadow: var(--shadow-floating);
+}
+
+.toolbar-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: flex-end;
+}
+
+.toolbar-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--color-text-subtle);
+    font-size: 0.9rem;
+}
+
+.player-select {
+    display: grid;
+    gap: 6px;
+}
+
+.player-select span {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.player-select select {
+    min-width: 260px;
+    padding: 11px 16px;
+    border-radius: var(--tile-radius);
+    border: 1px solid color-mix(in srgb, var(--color-layer-border) 60%, transparent);
+    background: color-mix(in srgb, var(--color-layer-card) 95%, transparent);
+    color: var(--color-text-primary);
+    font-weight: 600;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.player-select select:focus-visible {
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 30%, transparent);
+    outline: none;
+}
+
+.toolbar-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-tertiary {
+    border: 1px solid color-mix(in srgb, var(--color-layer-border) 60%, transparent);
+    background: color-mix(in srgb, var(--color-layer-soft) 94%, transparent);
+    padding: 10px 16px;
+    border-radius: var(--tile-radius);
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.btn-tertiary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 20px -16px rgba(19, 29, 55, 0.45);
+    border-color: var(--color-accent);
+}
+
+.content-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+}
+
+.workouts-grid {
+    display: grid;
+    gap: 32px;
+}
+
+@media (min-width: 1180px) {
+    .workouts-grid.has-admin {
+        grid-template-columns: minmax(0, 3.2fr) minmax(320px, 1.5fr);
+        align-items: start;
+    }
+
+    .workouts-grid.has-admin .admin-card {
+        position: sticky;
+        top: 96px;
+    }
+}
+
+.workout-card,
+.admin-card {
+    background: radial-gradient(135% 140% at 50% 0%, color-mix(in srgb, var(--color-layer-card) 100%, transparent) 0%, color-mix(in srgb, var(--color-layer-soft) 92%, transparent) 100%);
+    border: 1px solid color-mix(in srgb, var(--color-layer-border) 60%, transparent);
+    border-radius: 20px;
+    box-shadow: var(--shadow-elevated);
+    padding: 32px;
+    display: grid;
+    gap: 24px;
+}
+
+.workout-card-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+}
+
+.workout-card-overview {
+    display: grid;
+    gap: 12px;
+    max-width: 640px;
+}
+
+.workout-title {
+    margin: 0;
+    font-size: clamp(1.35rem, 2.4vw, 1.65rem);
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+.workout-meta-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    font-size: 0.95rem;
+    color: var(--color-text-subtle);
+}
+
+.overview-dot {
+    font-size: 0.75rem;
+    opacity: 0.6;
+}
+
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    background: color-mix(in srgb, var(--color-layer-border) 32%, transparent);
+    color: var(--color-text-secondary);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.chip-success {
+    background: color-mix(in srgb, #22c55e 26%, transparent);
+    color: #0f9d4c;
+}
+
+.chip-warning {
+    background: color-mix(in srgb, #f97316 28%, transparent);
+    color: #b45309;
+}
+
+.chip-muted {
+    background: color-mix(in srgb, var(--color-layer-border) 28%, transparent);
+    color: var(--color-text-secondary);
+}
+
+.workout-card-actions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+.btn-ghost-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 20px;
+    border-radius: 999px;
+    border: 1px solid color-mix(in srgb, var(--color-layer-border) 55%, transparent);
+    background: color-mix(in srgb, var(--color-layer-card) 98%, transparent);
+    color: var(--color-text-primary);
+    font-weight: 650;
+    letter-spacing: 0.02em;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.btn-ghost-pill:hover {
+    transform: translateY(-1px);
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-layer-card) 100%, transparent);
+    box-shadow: 0 14px 26px -20px rgba(255, 127, 0, 0.45);
+}
+
+.btn-ghost-pill[aria-disabled="true"] {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+.workout-meta {
+    display: grid;
+    gap: 4px;
+    font-size: 0.9rem;
+    color: var(--color-text-subtle);
+}
+
+.workout-meta span:first-child {
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+
+.workout-viewer {
+    border-radius: 18px;
+    border: 1px solid color-mix(in srgb, var(--color-layer-border) 60%, transparent);
+    background: color-mix(in srgb, var(--color-layer-soft) 95%, transparent);
+    padding: 16px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.viewer-frame {
+    border-radius: 14px;
+    overflow: hidden;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--color-layer-card) 96%, transparent), color-mix(in srgb, var(--color-layer-soft) 92%, transparent));
+}
+
+.viewer-frame object {
+    width: 100%;
+    height: clamp(420px, 70vh, 820px);
+    border: none;
+    display: block;
+}
+
+.workout-empty {
+    display: grid;
+    gap: 20px;
+    justify-items: center;
+    text-align: center;
+    padding: 60px 24px;
+    border-radius: 18px;
+    border: 1px dashed color-mix(in srgb, var(--color-layer-border) 55%, transparent);
+    background: color-mix(in srgb, var(--color-layer-soft) 94%, transparent);
+    color: var(--color-text-secondary);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.workout-empty[hidden] {
+    display: none;
+}
+
+.empty-icon {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, rgba(255, 127, 0, 0.18), rgba(255, 160, 0, 0.08));
+    border: 3px solid rgba(255, 127, 0, 0.25);
+    box-shadow: 0 0 36px rgba(255, 127, 0, 0.22);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+.empty-icon i {
+    font-size: 42px;
+    color: var(--color-accent);
+    animation: float 3s ease-in-out infinite;
+}
+
+.empty-title {
+    margin: 0;
+    font-size: clamp(1.6rem, 3vw, 2rem);
+    font-weight: 700;
+    color: var(--color-text-primary);
+    background: linear-gradient(135deg, var(--color-accent), var(--color-accent-bright));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.empty-message {
+    margin: 0;
+    max-width: 520px;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--color-text-muted);
+}
+
+.empty-help {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--color-text-subtle);
+}
+
+.admin-card-header h2 {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.2rem;
+}
+
+.workout-current {
+    display: grid;
+    gap: 8px;
+    padding: 20px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--color-layer-soft) 92%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-layer-border) 55%, transparent);
+}
+
+.current-chip-row {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+}
+
+.current-label {
+    margin: 0;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--color-text-subtle);
+}
+
+.current-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 650;
+    color: var(--color-text-primary);
+}
+
+.current-meta {
+    margin: 0;
+    color: var(--color-text-subtle);
+    font-size: 0.9rem;
+}
+
+.workout-upload {
+    display: grid;
+    gap: 18px;
+    padding: 22px;
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--color-layer-card) 94%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-layer-border) 55%, transparent);
+    transition: opacity 0.2s ease;
+}
+
+.workout-upload.is-disabled {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.upload-drop {
+    border: 2px dashed color-mix(in srgb, var(--color-layer-border) 60%, transparent);
+    border-radius: 16px;
+    padding: 36px 28px;
+    text-align: center;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    background: color-mix(in srgb, var(--color-layer-soft) 90%, transparent);
+    display: grid;
+    gap: 10px;
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.upload-drop:hover,
+.upload-drop:focus-within {
+    border-color: var(--color-accent);
+    background: color-mix(in srgb, var(--color-layer-soft) 95%, transparent);
+    transform: translateY(-1px);
+}
+
+.upload-drop input {
+    display: none;
+}
+
+.upload-prompt strong {
+    display: block;
+    font-size: 1.08rem;
+    font-weight: 650;
+}
+
+.upload-prompt small {
+    display: block;
+    font-size: 0.88rem;
+    color: var(--color-text-subtle);
+}
+
+.upload-note {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--color-text-subtle);
+}
+
+.upload-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.upload-status {
+    min-height: 1.2em;
+    margin: 0;
+    font-size: 0.92rem;
+    color: var(--color-text-subtle);
+}
+
+.upload-status.error {
+    color: var(--color-danger, #dc2626);
+}
+
+.workout-history {
+    display: grid;
+    gap: 16px;
+}
+
+.workout-history-header h3 {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    font-size: 1rem;
+    margin: 0;
+}
+
+.workout-history-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 12px;
+}
+
+.history-placeholder {
+    padding: 22px;
+    border: 1px dashed color-mix(in srgb, var(--color-layer-border) 55%, transparent);
+    border-radius: 16px;
+    background: color-mix(in srgb, var(--color-layer-soft) 94%, transparent);
+    color: var(--color-text-subtle);
+    text-align: center;
+    font-size: 0.95rem;
+}
+
+.history-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    padding: 18px 20px;
+    border-radius: 16px;
+    border: 1px solid color-mix(in srgb, var(--color-layer-border) 55%, transparent);
+    background: linear-gradient(140deg, color-mix(in srgb, var(--color-layer-card) 97%, transparent), color-mix(in srgb, var(--color-layer-soft) 92%, transparent));
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.history-item:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 28px -24px rgba(20, 22, 40, 0.55);
+}
+
+.history-item.is-active {
+    border-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
+    box-shadow: 0 18px 30px -26px color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
+
+.history-item.is-active .history-info h4 {
+    color: var(--color-accent);
+}
+
+.history-info {
+    display: grid;
+    gap: 6px;
+}
+
+.history-info h4 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--color-text-primary);
+}
+
+.history-info p {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--color-text-subtle);
+}
+
+.history-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.history-actions .history-delete {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    border-radius: var(--tile-radius);
+    border: 1px solid color-mix(in srgb, var(--color-layer-border) 60%, transparent);
+    background: transparent;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+}
+
+.history-actions .history-delete:hover {
+    border-color: var(--color-danger, #dc2626);
+    color: var(--color-danger, #dc2626);
+    transform: translateY(-1px);
+}
+
+.history-active-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+    color: var(--color-accent);
+}
+
+.view-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-layer-soft) 94%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-layer-border) 55%, transparent);
+}
+
+.view-toggle .toggle-btn {
+    border: none;
+    background: transparent;
+    height: auto;
+}
+
+.toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.toggle-btn.active {
+    background: var(--color-layer-card);
+    color: var(--color-accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 32%, transparent);
+}
+
+.toggle-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+}
+
+.viewer-refresh.is-spinning i {
+    animation: spin 0.8s linear infinite;
+}
+
+.is-hidden {
+    display: none !important;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 36px rgba(255, 127, 0, 0.22);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 0 48px rgba(255, 127, 0, 0.3);
+    }
+}
+
+@keyframes float {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-8px);
+    }
+}
+</style>
+<script>
+const WORKOUT_INITIAL = {{ workout_document|tojson|default('null') }};
+const INITIAL_PLAYER_ID = {{ initial_player_id|tojson }};
+const INITIAL_PLAYER_NAME = {{ initial_player_label|tojson }};
+const CURRENT_USER_ID = {{ current_user_id|tojson }};
+const CURRENT_USER_LABEL = {{ current_user_label|tojson }};
+const WORKOUT_FETCH_URL = "{{ url_for('api_workouts_latest') }}";
+const WORKOUT_UPLOAD_URL = "{{ url_for('api_admin_workouts_upload') if session.get('is_admin') else '' }}";
+const ADMIN_USERS_URL = "{{ url_for('api_admin_users') if session.get('is_admin') else '' }}";
+const WORKOUT_LIST_BASE = "{{ url_for('api_admin_workouts_for_player', player_id=0)[:-1] if session.get('is_admin') else '' }}";
+const WORKOUT_DELETE_BASE = "{{ url_for('api_admin_workouts_delete', doc_id=0)[:-1] if session.get('is_admin') else '' }}";
+const CSRF_TOKEN = "{{ csrf_token }}";
+const IS_ADMIN = {{ 'true' if session.get('is_admin') else 'false' }};
+
+window.addEventListener('DOMContentLoaded', () => {
+    const isAdmin = IS_ADMIN === true || IS_ADMIN === 'true';
+    const defaultPlayerId = INITIAL_PLAYER_ID !== null
+        ? INITIAL_PLAYER_ID
+        : (isAdmin ? null : (CURRENT_USER_ID !== null ? CURRENT_USER_ID : null));
+    const defaultPlayerName = (INITIAL_PLAYER_ID !== null && INITIAL_PLAYER_NAME)
+        ? INITIAL_PLAYER_NAME
+        : (!isAdmin && CURRENT_USER_LABEL ? CURRENT_USER_LABEL : (INITIAL_PLAYER_NAME || ''));
+
+    const state = {
+        playerId: defaultPlayerId,
+        playerName: defaultPlayerName,
+        doc: WORKOUT_INITIAL,
+        players: [],
+        history: [],
+    };
+
+    const playerPanel = document.querySelector('[data-mode-panel="player"]');
+    const adminPanel = document.querySelector('[data-mode-panel="admin"]');
+    const toggleButtons = document.querySelectorAll('[data-mode-toggle]');
+    const playerSelect = document.getElementById('workoutPlayerSelect');
+    const playerReloadBtn = document.getElementById('workoutPlayerReload');
+    const metaBlock = document.getElementById('workoutMeta');
+    const playerLabelEl = document.getElementById('workoutPlayerLabel');
+    const filenameEl = document.getElementById('workoutFilename');
+    const uploadedEl = document.getElementById('workoutUploaded');
+    const frameEl = document.getElementById('workoutFrame');
+    const viewer = document.getElementById('workoutViewer');
+    let emptyState = document.getElementById('workoutEmptyState') || null;
+    let emptyTitle = document.getElementById('workoutEmptyTitle') || null;
+    let emptyMessage = document.getElementById('workoutEmptyMessage') || null;
+    const downloadBtn = document.getElementById('workoutDownloadButton');
+    const inlineDownload = document.getElementById('workoutDownloadInline');
+    const playerRefreshBtn = document.getElementById('workoutRefreshPlayer');
+    const adminRefreshBtn = document.getElementById('workoutRefreshAdmin');
+    const uploadForm = document.getElementById('workoutUploadForm');
+    const uploadButton = document.getElementById('workoutUploadButton');
+    const uploadNote = document.getElementById('workoutUploadNote');
+    const uploadStatus = document.getElementById('workoutUploadStatus');
+    const fileInput = document.getElementById('workoutFileInput');
+    const uploadPromptTitle = uploadForm ? uploadForm.querySelector('.upload-prompt strong') : null;
+    const uploadPromptSubtitle = uploadForm ? uploadForm.querySelector('.upload-prompt small') : null;
+    const historyList = document.getElementById('workoutHistoryList');
+    const statusChip = document.getElementById('workoutStatusChip');
+    const fileInline = document.getElementById('workoutFileInline');
+    const lastUpdatedLabel = document.getElementById('workoutLastUpdated');
+    const playerInline = document.getElementById('workoutPlayerNameInline');
+    const adminStatusChip = document.getElementById('workoutAdminStatus');
+    const summaryTitle = document.getElementById('workoutCurrentTitle');
+    const summaryMeta = document.getElementById('workoutCurrentMeta');
+
+    function ensureEmptyState() {
+        if (emptyState) {
+            return emptyState;
+        }
+        emptyState = document.createElement('div');
+        emptyState.className = 'workout-empty';
+        emptyState.id = 'workoutEmptyState';
+
+        const icon = document.createElement('div');
+        icon.className = 'empty-icon';
+        icon.innerHTML = '<i class="fas fa-file-circle-plus"></i>';
+
+        emptyTitle = document.createElement('h3');
+        emptyTitle.id = 'workoutEmptyTitle';
+
+        emptyMessage = document.createElement('p');
+        emptyMessage.id = 'workoutEmptyMessage';
+
+        emptyState.appendChild(icon);
+        emptyState.appendChild(emptyTitle);
+        emptyState.appendChild(emptyMessage);
+
+        if (viewer && viewer.parentNode) {
+            viewer.parentNode.insertBefore(emptyState, viewer);
+        }
+        return emptyState;
+    }
+
+    function showEmptyState(title, message) {
+        const block = ensureEmptyState();
+        block.hidden = false;
+        if (emptyTitle) {
+            emptyTitle.textContent = title || '';
+        }
+        if (emptyMessage) {
+            emptyMessage.textContent = message || '';
+        }
+    }
+
+    function hideEmptyState() {
+        if (!emptyState) {
+            return;
+        }
+        emptyState.hidden = true;
+        if (emptyTitle) {
+            emptyTitle.textContent = '';
+        }
+        if (emptyMessage) {
+            emptyMessage.textContent = '';
+        }
+    }
+
+    function setChipState(element, state, label) {
+        if (!element) {
+            return;
+        }
+        element.textContent = label;
+        element.classList.remove('chip-success', 'chip-warning', 'chip-muted');
+        if (state === 'active') {
+            element.classList.add('chip-success');
+        } else if (state === 'awaiting') {
+            element.classList.add('chip-warning');
+        } else {
+            element.classList.add('chip-muted');
+        }
+    }
+
+    function escapeHtml(value) {
+        if (value === null || value === undefined) {
+            return '';
+        }
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function appendCacheBust(url) {
+        if (!url) {
+            return url;
+        }
+        const stamp = Date.now();
+        const [base, hashFragment] = url.split('#');
+        const delimiter = base.includes('?') ? '&' : '?';
+        const rebuilt = `${base}${delimiter}v=${stamp}`;
+        return hashFragment ? `${rebuilt}#${hashFragment}` : rebuilt;
+    }
+
+    function handleResponse(response) {
+        return response.json().then((payload) => ({ ok: response.ok, payload }));
+    }
+
+    function setMode(mode) {
+        if (!isAdmin) {
+            return;
+        }
+        toggleButtons.forEach((button) => {
+            const matches = button.dataset.modeToggle === mode;
+            button.classList.toggle('active', matches);
+            button.setAttribute('aria-pressed', matches ? 'true' : 'false');
+        });
+        if (playerPanel) {
+            playerPanel.classList.toggle('is-hidden', mode === 'admin');
+        }
+        if (adminPanel) {
+            adminPanel.classList.toggle('is-hidden', mode === 'player');
+        }
+    }
+
+    function setUploadStatus(message, isError = false) {
+        if (!uploadStatus) {
+            return;
+        }
+        uploadStatus.textContent = message || '';
+        uploadStatus.classList.toggle('error', Boolean(isError));
+    }
+
+    function setUploading(isUploading) {
+        if (!isAdmin) {
+            return;
+        }
+        if (uploadButton) {
+            uploadButton.disabled = isUploading || !state.playerId;
+            uploadButton.innerHTML = isUploading
+                ? '<i class="fas fa-spinner fa-spin"></i><span>Uploading…</span>'
+                : '<i class="fas fa-upload"></i><span>Upload &amp; Publish</span>';
+        }
+        if (adminRefreshBtn) {
+            adminRefreshBtn.disabled = isUploading || !state.playerId;
+        }
+    }
+
+    function toggleRefreshing(isRefreshing) {
+        const disable = isRefreshing || !state.playerId;
+        if (playerRefreshBtn) {
+            playerRefreshBtn.disabled = disable;
+            playerRefreshBtn.classList.toggle('is-spinning', isRefreshing);
+        }
+        if (adminRefreshBtn) {
+            adminRefreshBtn.disabled = disable;
+            adminRefreshBtn.classList.toggle('is-spinning', isRefreshing);
+        }
+    }
+
+    function updateUploadNote() {
+        if (!uploadNote) {
+            return;
+        }
+        if (!state.playerId) {
+            uploadNote.textContent = 'Select a player to enable uploading.';
+        } else {
+            uploadNote.textContent = 'Tip: export from Google Sheets or Excel as a single PDF for best viewing.';
+        }
+    }
+
+    function resetUploadPrompt() {
+        if (uploadPromptTitle) {
+            uploadPromptTitle.textContent = 'Drop workout PDF';
+        }
+        if (uploadPromptSubtitle) {
+            uploadPromptSubtitle.textContent = 'or click to browse files';
+        }
+    }
+
+    function updateAdminAvailability() {
+        if (!isAdmin || !uploadForm) {
+            return;
+        }
+        const hasPlayer = Boolean(state.playerId);
+        if (adminStatusChip) {
+            if (!hasPlayer) {
+                setChipState(adminStatusChip, 'select', 'No player selected');
+            } else if (state.doc) {
+                setChipState(adminStatusChip, 'active', 'Latest plan');
+            } else {
+                setChipState(adminStatusChip, 'awaiting', 'Awaiting upload');
+            }
+        }
+        uploadForm.classList.toggle('is-disabled', !hasPlayer);
+        if (uploadButton && !isAdmin) {
+            uploadButton.disabled = false;
+        } else if (uploadButton) {
+            uploadButton.disabled = !hasPlayer;
+        }
+        if (adminRefreshBtn) {
+            adminRefreshBtn.disabled = !hasPlayer;
+        }
+        updateUploadNote();
+        if (!hasPlayer) {
+            setUploadStatus('Select a player to enable uploading.');
+        }
+    }
+
+    function getPlayerName(id) {
+        if (!Number.isInteger(id)) {
+            return '';
+        }
+        const match = state.players.find((player) => player.id === id);
+        if (match) {
+            return match.name;
+        }
+        if (!isAdmin && CURRENT_USER_ID === id) {
+            return CURRENT_USER_LABEL || '';
+        }
+        return state.playerName || '';
+    }
+
+    function updatePlayerLabel() {
+        if (playerLabelEl) {
+            if (state.playerId) {
+                const label = state.playerName || 'Player';
+                playerLabelEl.textContent = `For ${label}`;
+            } else {
+                playerLabelEl.textContent = '';
+            }
+        }
+        if (metaBlock) {
+            const hasFilename = filenameEl && filenameEl.textContent && filenameEl.textContent.trim().length > 0;
+            metaBlock.hidden = !state.playerId || (!state.doc && !hasFilename);
+        }
+    }
+
+    function applyWorkout(doc) {
+        state.doc = doc || null;
+        const hasPlayer = Boolean(state.playerId);
+        const hasDoc = Boolean(doc);
+        state.playerName = state.playerName || getPlayerName(state.playerId);
+
+        updatePlayerLabel();
+
+        if (playerInline) {
+            playerInline.textContent = state.playerName || (isAdmin ? 'Choose a player' : 'Player');
+        }
+
+        if (!hasPlayer) {
+            showEmptyState('Select a player', 'Choose a player above to preview and manage their workout plan.');
+            if (viewer) viewer.hidden = true;
+            if (downloadBtn) {
+                downloadBtn.href = '#';
+                downloadBtn.setAttribute('aria-disabled', 'true');
+            }
+            if (inlineDownload) {
+                inlineDownload.href = '#';
+            }
+            if (frameEl) {
+                frameEl.removeAttribute('data');
+            }
+            if (fileInline) {
+                fileInline.textContent = 'Select a player';
+            }
+            if (lastUpdatedLabel) {
+                lastUpdatedLabel.textContent = isAdmin ? 'Waiting for player selection' : 'Waiting for staff update';
+            }
+            setChipState(statusChip, 'select', 'Select player');
+            if (adminStatusChip) {
+                setChipState(adminStatusChip, 'select', 'No player selected');
+            }
+            if (summaryTitle) {
+                summaryTitle.textContent = 'Choose a player';
+            }
+            if (summaryMeta) {
+                summaryMeta.textContent = 'Pick a player to start managing their workouts.';
+            }
+            if (fileInline) {
+                fileInline.textContent = 'Select a player';
+            }
+            if (lastUpdatedLabel) {
+                lastUpdatedLabel.textContent = isAdmin ? 'Waiting for player selection' : 'Waiting for staff update';
+            }
+            setChipState(statusChip, 'select', 'Select player');
+            if (adminStatusChip) {
+                setChipState(adminStatusChip, 'select', 'No player selected');
+            }
+            return;
+        }
+
+        if (hasDoc) {
+            hideEmptyState();
+            if (viewer) viewer.hidden = false;
+            if (filenameEl) {
+                filenameEl.textContent = doc.filename || 'Workout plan';
+            }
+            if (uploadedEl) {
+                uploadedEl.textContent = doc.uploaded_at ? `Uploaded ${doc.uploaded_at}` : '';
+            }
+            if (fileInline) {
+                fileInline.textContent = doc.filename || 'Workout plan';
+            }
+            if (lastUpdatedLabel) {
+                lastUpdatedLabel.textContent = doc.uploaded_at ? `Updated ${doc.uploaded_at}` : 'Updated moments ago';
+            }
+            const targetUrl = appendCacheBust(doc.viewer_url || doc.download_url);
+            if (frameEl) {
+                if (targetUrl) {
+                    const fragmentReady = targetUrl.includes('#') ? targetUrl : `${targetUrl}#toolbar=0`;
+                    frameEl.setAttribute('data', fragmentReady);
+                } else {
+                    frameEl.removeAttribute('data');
+                }
+            }
+            if (downloadBtn) {
+                if (doc.download_url) {
+                    downloadBtn.href = doc.download_url;
+                    downloadBtn.setAttribute('aria-disabled', 'false');
+                } else {
+                    downloadBtn.href = '#';
+                    downloadBtn.setAttribute('aria-disabled', 'true');
+                }
+            }
+            if (inlineDownload) {
+                inlineDownload.href = doc.download_url || '#';
+            }
+            if (summaryTitle) {
+                summaryTitle.textContent = doc.filename || (state.playerName || 'Workout');
+            }
+            if (summaryMeta) {
+                summaryMeta.textContent = doc.uploaded_at ? `Uploaded ${doc.uploaded_at}` : 'Published just now.';
+            }
+            setChipState(statusChip, 'active', 'Active plan');
+            if (adminStatusChip) {
+                setChipState(adminStatusChip, 'active', 'Latest plan');
+            }
+        } else {
+            if (viewer) viewer.hidden = true;
+            showEmptyState(
+                'No workout yet',
+                isAdmin
+                    ? `Upload a PDF to publish the next plan for ${state.playerName || 'this player'}.`
+                    : 'Your coaches haven’t posted a workout yet. Check back soon.'
+            );
+            if (filenameEl) {
+                filenameEl.textContent = '';
+            }
+            if (uploadedEl) {
+                uploadedEl.textContent = '';
+            }
+            if (fileInline) {
+                fileInline.textContent = hasPlayer
+                    ? (isAdmin ? `${state.playerName || 'Player'} · Awaiting upload` : 'No workout assigned yet')
+                    : 'Select a player';
+            }
+            if (lastUpdatedLabel) {
+                lastUpdatedLabel.textContent = hasPlayer
+                    ? (isAdmin ? 'Waiting for upload' : 'Waiting for staff update')
+                    : (isAdmin ? 'Waiting for player selection' : 'Waiting for staff update');
+            }
+            if (frameEl) {
+                frameEl.removeAttribute('data');
+            }
+            if (downloadBtn) {
+                downloadBtn.href = '#';
+                downloadBtn.setAttribute('aria-disabled', 'true');
+            }
+            if (inlineDownload) {
+                inlineDownload.href = '#';
+            }
+            if (summaryTitle) {
+                summaryTitle.textContent = state.playerName || 'No workout yet';
+            }
+            if (summaryMeta) {
+                summaryMeta.textContent = isAdmin
+                    ? 'No workout uploaded yet. Add a PDF to publish the first plan.'
+                    : 'You’ll see the latest workout as soon as it’s ready.';
+            }
+            setChipState(statusChip, 'awaiting', 'Awaiting upload');
+            if (adminStatusChip) {
+                setChipState(adminStatusChip, 'awaiting', 'Awaiting upload');
+            }
+        }
+    }
+
+    function renderHistory(history) {
+        if (!isAdmin || !historyList) {
+            return;
+        }
+        if (!state.playerId) {
+            historyList.innerHTML = '<li class="history-placeholder">Select a player to view previous uploads.</li>';
+            return;
+        }
+        if (!history || !history.length) {
+            historyList.innerHTML = '<li class="history-placeholder">No workouts uploaded yet for this player.</li>';
+            return;
+        }
+        historyList.innerHTML = history.map((doc) => {
+            const isActive = state.doc && doc.id === state.doc.id;
+            const filename = escapeHtml(doc.filename || 'Workout plan');
+            const uploaded = escapeHtml(doc.uploaded_at || 'Uploaded recently');
+            const downloadUrl = escapeHtml(doc.download_url || '#');
+            return `
+                <li class="history-item${isActive ? ' is-active' : ''}" data-doc-id="${doc.id}">
+                    <div class="history-info">
+                        <h4>${filename}</h4>
+                        <p>${uploaded}</p>
+                    </div>
+                    <div class="history-actions">
+                        <a href="${downloadUrl}" class="btn-secondary" rel="noopener">
+                            <i class="fas fa-arrow-down"></i>
+                            <span>Download</span>
+                        </a>
+                        <button type="button" class="history-delete" data-doc-action="delete">
+                            <i class="fas fa-trash"></i>
+                            <span>Delete</span>
+                        </button>
+                        ${isActive ? '<span class="history-active-pill"><i class="fas fa-star"></i> Current</span>' : ''}
+                    </div>
+                </li>
+            `;
+        }).join('');
+    }
+
+    function refreshWorkout() {
+        const hasPlayer = Boolean(state.playerId);
+        updateUploadNote();
+        if (!hasPlayer) {
+            toggleRefreshing(false);
+            applyWorkout(null);
+            renderHistory([]);
+            return;
+        }
+
+        const params = new URLSearchParams({ player_id: state.playerId });
+        toggleRefreshing(true);
+
+        fetch(`${WORKOUT_FETCH_URL}?${params.toString()}`, { credentials: 'same-origin' })
+            .then(handleResponse)
+            .then(({ ok, payload }) => {
+                if (!ok) {
+                    throw new Error(payload.error || 'Unable to load workout.');
+                }
+                state.doc = payload.workout || null;
+                applyWorkout(state.doc);
+                updateAdminAvailability();
+                if (state.doc) {
+                    setUploadStatus('Latest workout loaded.');
+                } else if (isAdmin) {
+                    setUploadStatus('No workout uploaded yet.');
+                }
+            })
+            .catch((error) => {
+                console.error(error);
+                if (isAdmin) {
+                    setUploadStatus(error.message || 'Unable to refresh workout.', true);
+                }
+            })
+            .finally(() => {
+                toggleRefreshing(false);
+            });
+
+        if (isAdmin && WORKOUT_LIST_BASE) {
+            fetch(`${WORKOUT_LIST_BASE}${state.playerId}`, { credentials: 'same-origin' })
+                .then(handleResponse)
+                .then(({ ok, payload }) => {
+                    if (!ok) {
+                        throw new Error(payload.error || 'Unable to load workout history.');
+                    }
+                    state.history = payload.workouts || [];
+                    renderHistory(state.history);
+                })
+                .catch((error) => {
+                    console.error(error);
+                    renderHistory([]);
+                    setUploadStatus(error.message || 'Unable to load workout history.', true);
+                });
+        }
+    }
+
+    function populatePlayerSelect() {
+        if (!playerSelect) {
+            return;
+        }
+        const options = ['<option value="">Select a player</option>'];
+        state.players.forEach((player) => {
+            const emailSuffix = player.email ? ` · ${escapeHtml(player.email)}` : '';
+            options.push(`<option value="${player.id}">${escapeHtml(player.name)}${emailSuffix}</option>`);
+        });
+        playerSelect.innerHTML = options.join('');
+        if (state.playerId) {
+            playerSelect.value = String(state.playerId);
+        }
+    }
+
+    function loadPlayers() {
+        if (!isAdmin || !ADMIN_USERS_URL || !playerSelect) {
+            return;
+        }
+        playerSelect.disabled = true;
+        playerSelect.innerHTML = '<option value="">Loading players…</option>';
+        if (playerReloadBtn) {
+            playerReloadBtn.disabled = true;
+        }
+
+        fetch(ADMIN_USERS_URL, { credentials: 'same-origin' })
+            .then(handleResponse)
+            .then(({ ok, payload }) => {
+                if (!ok) {
+                    throw new Error(payload.error || 'Unable to load player list.');
+                }
+                const users = payload.users || [];
+                state.players = users.map((user) => {
+                    const first = user.first_name || '';
+                    const last = user.last_name || '';
+                    const fullName = `${first} ${last}`.trim();
+                    return {
+                        id: user.id,
+                        name: fullName || (user.email || `Player ${user.id}`),
+                        email: user.email || '',
+                    };
+                }).sort((a, b) => a.name.localeCompare(b.name));
+                populatePlayerSelect();
+                updateAdminAvailability();
+            })
+            .catch((error) => {
+                console.error(error);
+                setUploadStatus(error.message || 'Unable to load player list.', true);
+                populatePlayerSelect();
+            })
+            .finally(() => {
+                playerSelect.disabled = false;
+                if (playerReloadBtn) {
+                    playerReloadBtn.disabled = false;
+                }
+            });
+    }
+
+    function selectPlayer(newId) {
+        const numericId = Number(newId);
+        const normalizedId = Number.isFinite(numericId) && numericId > 0 ? numericId : null;
+        if (state.playerId === normalizedId) {
+            refreshWorkout();
+            return;
+        }
+        state.playerId = normalizedId;
+        state.playerName = normalizedId ? getPlayerName(normalizedId) : '';
+        state.doc = null;
+        if (playerSelect) {
+            playerSelect.value = normalizedId ? String(normalizedId) : '';
+        }
+        resetUploadPrompt();
+        applyWorkout(null);
+        updateAdminAvailability();
+        refreshWorkout();
+    }
+
+    function deleteWorkout(docId, trigger) {
+        if (!WORKOUT_DELETE_BASE) {
+            return;
+        }
+        const numericId = Number(docId);
+        if (!Number.isInteger(numericId)) {
+            return;
+        }
+        const confirmed = window.confirm('Delete this workout? This cannot be undone.');
+        if (!confirmed) {
+            return;
+        }
+        if (trigger) {
+            trigger.disabled = true;
+        }
+        fetch(`${WORKOUT_DELETE_BASE}${numericId}`, {
+            method: 'DELETE',
+            credentials: 'same-origin',
+        })
+            .then(handleResponse)
+            .then(({ ok, payload }) => {
+                if (!ok) {
+                    throw new Error(payload.error || 'Unable to delete workout.');
+                }
+                setUploadStatus('Workout deleted.');
+                refreshWorkout();
+            })
+            .catch((error) => {
+                console.error(error);
+                setUploadStatus(error.message || 'Unable to delete workout.', true);
+            })
+            .finally(() => {
+                if (trigger) {
+                    trigger.disabled = false;
+                }
+            });
+    }
+
+    if (isAdmin) {
+        toggleButtons.forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                setMode(button.dataset.modeToggle);
+            });
+        });
+    }
+
+    if (playerSelect) {
+        playerSelect.addEventListener('change', (event) => {
+            selectPlayer(event.target.value ? Number(event.target.value) : null);
+        });
+    }
+
+    if (playerReloadBtn) {
+        playerReloadBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            loadPlayers();
+        });
+    }
+
+    if (playerRefreshBtn) {
+        playerRefreshBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            refreshWorkout();
+        });
+    }
+
+    if (adminRefreshBtn) {
+        adminRefreshBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            refreshWorkout();
+        });
+    }
+
+    if (uploadForm && isAdmin) {
+        uploadForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            if (!state.playerId) {
+                setUploadStatus('Select a player before uploading.', true);
+                return;
+            }
+            if (!fileInput || !fileInput.files.length) {
+                setUploadStatus('Choose a PDF to upload.', true);
+                return;
+            }
+            const formData = new FormData();
+            formData.append('csrf_token', CSRF_TOKEN);
+            formData.append('player_id', state.playerId);
+            formData.append('document', fileInput.files[0]);
+
+            setUploading(true);
+            fetch(WORKOUT_UPLOAD_URL, {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+            })
+                .then(handleResponse)
+                .then(({ ok, payload }) => {
+                    if (!ok) {
+                        throw new Error(payload.error || 'Upload failed.');
+                    }
+                    resetUploadPrompt();
+                    fileInput.value = '';
+                    setUploadStatus('Workout updated successfully.');
+                    state.doc = payload.workout || null;
+                    applyWorkout(state.doc);
+                    updateAdminAvailability();
+                    setMode('player');
+                    refreshWorkout();
+                })
+                .catch((error) => {
+                    console.error(error);
+                    setUploadStatus(error.message || 'Upload failed.', true);
+                })
+                .finally(() => {
+                    setUploading(false);
+                });
+        });
+    }
+
+    if (fileInput && isAdmin) {
+        fileInput.addEventListener('change', () => {
+            if (!uploadPromptTitle || !uploadPromptSubtitle) {
+                return;
+            }
+            if (fileInput.files && fileInput.files.length) {
+                uploadPromptTitle.textContent = fileInput.files[0].name;
+                uploadPromptSubtitle.textContent = 'Ready to upload';
+            } else {
+                resetUploadPrompt();
+            }
+        });
+    }
+
+    if (historyList && isAdmin) {
+        historyList.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-doc-action="delete"]');
+            if (!button) {
+                return;
+            }
+            const item = button.closest('[data-doc-id]');
+            if (!item) {
+                return;
+            }
+            const docId = Number(item.dataset.docId);
+            deleteWorkout(docId, button);
+        });
+    }
+
+    state.playerName = getPlayerName(state.playerId);
+    updatePlayerLabel();
+    applyWorkout(state.doc);
+    updateAdminAvailability();
+
+    if (isAdmin) {
+        loadPlayers();
+        setMode('player');
+        if (state.playerId) {
+            refreshWorkout();
+        }
+    } else {
+        refreshWorkout();
+    }
+});
+</script>
+{% endblock %}
+

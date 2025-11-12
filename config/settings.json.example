@@ -1,0 +1,38 @@
+{
+  "data_sources": {
+    "allow_unverified_sources": false,
+    "auto_refresh_on_startup": false,
+    "data_directory": "./data",
+    "use_local_cache": true
+  },
+  "general": {
+    "auto_check_updates": true,
+    "auto_collapse_sidebar": false,
+    "secret_key": "",
+    "show_beta_features": false,
+    "theme": "dark"
+  },
+  "integrations": {
+    "fangraphs_password": "",
+    "fangraphs_username": "",
+    "sportradar_api_key": "",
+    "statcast_cookie": "",
+    "trumedia_token": ""
+  },
+  "notifications": {
+    "email_address": "",
+    "enable_email": false,
+    "notify_on_completion": true,
+    "notify_on_failure": true
+  },
+  "reports": {
+    "auto_open_downloads": true,
+    "default_export_format": "pdf",
+    "default_opponent": "",
+    "default_pitcher_team": "AUTO",
+    "default_season_start": "2025-03-20",
+    "default_team": "AUTO",
+    "use_next_series": false
+  }
+}
+
