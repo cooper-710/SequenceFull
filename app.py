@@ -27,6 +27,19 @@ from typing import Optional, List, Dict, Any, Set, Tuple
 
 import settings_manager
 
+# --- Render Free Tier fallback (safe to keep forever) ---
+# If these env vars aren't set by the host, default to /tmp so free-tier works.
+if not os.environ.get("APP_DATA_DIR"):
+    os.environ["APP_DATA_DIR"] = "/tmp"
+
+if not os.environ.get("APP_SQLITE_PATH"):
+    from pathlib import Path as _P
+    _base = _P(os.environ["APP_DATA_DIR"])
+    _base.mkdir(parents=True, exist_ok=True)
+    os.environ["APP_SQLITE_PATH"] = str(_base / "database" / "players.db")
+# --- end fallback ---
+
+
 # Import database and client modules
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 try:
